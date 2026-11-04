@@ -1,11 +1,10 @@
 @page "/venues"
 @inject ClubApi Club
 @inject ApiOrigin Origin
-@inject ISnackbar Snackbar
 
 <PageTitle>Venues · OBWC</PageTitle>
 <h1>Venues</h1>
-<p class="lede">Places the club uses, with an address and inside and outside photos. None are listed until an admin adds them.</p>
+<p class="lede">Places the club uses. The list is kept by a GM or an admin.</p>
 
 @if (_loading)
 {
@@ -17,145 +16,46 @@ else if (!string.IsNullOrEmpty(_error))
 }
 else if (_venues.Count == 0)
 {
-    <MudAlert Severity="Severity.Info">Venues the club uses will be listed here, with an address and inside and outside photos.</MudAlert>
+    <MudAlert Severity="Severity.Info">No venues have been entered yet.</MudAlert>
 }
 
 @foreach (var venue in _venues)
 {
     <MudPaper Class="pa-3 mb-3" Outlined="true">
         <h2>@venue.Name</h2>
-        @if (!string.IsNullOrWhiteSpace(venue.Address)) { <p>@venue.Address</p> }
-        @if (!string.IsNullOrWhiteSpace(venue.Description)) { <p>@venue.Description</p> }
-        <div class="link-grid">
-            <PhotoSlot Src="@Origin.Absolute(venue.InsidePhotoUrl)" Label="Inside photo not added yet" Alt="@($"{venue.Name} inside")" />
-            <PhotoSlot Src="@Origin.Absolute(venue.OutsidePhotoUrl)" Label="Outside photo not added yet" Alt="@($"{venue.Name} outside")" />
-        </div>
-        <AuthorizeView Roles="Admin,SuperAdmin">
-            <Authorized>
-                <MudStack Row="true" Class="flex-wrap mt-2">
-                    <div>
-                        <label>Inside photo <InputFile OnChange="e => _inside[venue.Id] = e.File" accept="image/*" /></label>
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Upload(venue.Id, true)">Upload inside</MudButton>
-                    </div>
-                    <div>
-                        <label>Outside photo <InputFile OnChange="e => _outside[venue.Id] = e.File" accept="image/*" /></label>
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Upload(venue.Id, false)">Upload outside</MudButton>
-                    </div>
-                </MudStack>
-                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => Edit(venue)">Edit</MudButton>
-                <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Text" OnClick="() => Remove(venue.Id)">Remove</MudButton>
-            </Authorized>
-        </AuthorizeView>
+        @if (!string.IsNullOrWhiteSpace(venue.Address))
+        {
+            <p>@venue.Address</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(venue.Description))
+        {
+            <p style="white-space:pre-wrap">@venue.Description</p>
+        }
+        @if (venue.HasInsidePhoto || venue.HasOutsidePhoto)
+        {
+            <div class="link-grid">
+                @if (venue.HasInsidePhoto)
+                {
+                    <PhotoSlot Src="@Origin.Absolute(venue.InsidePhotoUrl)" Label="Inside" Alt="@($"{venue.Name} inside")" />
+                }
+                @if (venue.HasOutsidePhoto)
+                {
+                    <PhotoSlot Src="@Origin.Absolute(venue.OutsidePhotoUrl)" Label="Outside" Alt="@($"{venue.Name} outside")" />
+                }
+            </div>
+        }
     </MudPaper>
 }
 
-<AuthorizeView Roles="Admin,SuperAdmin">
-    <Authorized>
-        <MudPaper Class="pa-3" Outlined="true">
-            <MudText Typo="Typo.subtitle1">@(_editing is null ? "Add a venue" : "Edit venue")</MudText>
-            <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Required="true" Class="mt-2" />
-            <MudTextField @bind-Value="_address" Label="Address" Variant="Variant.Outlined" Class="mt-2" />
-            <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined" Lines="3" Class="mt-2" />
-            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">@(_editing is null ? "Add venue" : "Save venue")</MudButton>
-            @if (_editing is not null)
-            {
-                <MudButton Class="mt-3 ml-2" Variant="Variant.Text" OnClick="Clear">Cancel</MudButton>
-            }
-        </MudPaper>
-    </Authorized>
-</AuthorizeView>
-
 @code {
     private List<VenueDto> _venues = [];
-    private readonly Dictionary<Guid, IBrowserFile?> _inside = [];
-    private readonly Dictionary<Guid, IBrowserFile?> _outside = [];
-    private Guid? _editing;
     private bool _loading = true;
-    private bool _busy;
     private string? _error;
-    private string _name = "", _address = "", _description = "";
 
-    protected override async Task OnInitializedAsync() => await Load();
-
-    private async Task Load()
+    protected override async Task OnInitializedAsync()
     {
-        _loading = true;
         try { _venues = (await Club.GetVenuesAsync()).ToList(); }
         catch (ClubApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
-    }
-
-    private void Edit(VenueDto venue)
-    {
-        _editing = venue.Id;
-        _name = venue.Name;
-        _address = venue.Address ?? "";
-        _description = venue.Description ?? "";
-    }
-
-    private void Clear()
-    {
-        _editing = null;
-        _name = _address = _description = "";
-    }
-
-    private async Task Save()
-    {
-        if (string.IsNullOrWhiteSpace(_name))
-        {
-            Snackbar.Add("Enter a venue name.", Severity.Warning);
-            return;
-        }
-        _busy = true;
-        var request = new SaveVenueRequest
-        {
-            Name = _name.Trim(),
-            Address = string.IsNullOrWhiteSpace(_address) ? null : _address.Trim(),
-            Description = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim()
-        };
-        try
-        {
-            if (_editing is Guid id)
-                await Club.UpdateVenueAsync(id, request);
-            else
-                await Club.CreateVenueAsync(request);
-            Clear();
-            await Load();
-            Snackbar.Add("Venue saved.", Severity.Success);
-        }
-        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
-        finally { _busy = false; }
-    }
-
-    private async Task Remove(Guid id)
-    {
-        try
-        {
-            await Club.DeleteVenueAsync(id);
-            if (_editing == id) Clear();
-            await Load();
-        }
-        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
-    }
-
-    private async Task Upload(Guid id, bool inside)
-    {
-        var file = inside ? _inside.GetValueOrDefault(id) : _outside.GetValueOrDefault(id);
-        if (file is null)
-        {
-            Snackbar.Add("Choose a photo first.", Severity.Warning);
-            return;
-        }
-        try
-        {
-            await using var stream = file.OpenReadStream(10 * 1024 * 1024);
-            using var buffer = new MemoryStream();
-            await stream.CopyToAsync(buffer);
-            var bytes = buffer.ToArray();
-            await Club.UploadVenuePhotosAsync(id, inside ? bytes : null, inside ? file.Name : null, inside ? null : bytes, inside ? null : file.Name);
-            await Load();
-            Snackbar.Add("Photo saved.", Severity.Success);
-        }
-        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
 }

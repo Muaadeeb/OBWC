@@ -12,7 +12,7 @@ public class VenuesController(ApplicationDbContext db, FileStorage files) : Club
             .ToArray());
 
     [HttpPost]
-    [Authorize(Policy = PolicyNames.Admin)]
+    [Authorize(Policy = PolicyNames.GmOrAdmin)]
     public async Task<ActionResult<VenueDto>> Create(SaveVenueRequest request, CancellationToken cancellationToken)
     {
         var venue = new Venue { Id = Guid.NewGuid() };
@@ -23,7 +23,7 @@ public class VenuesController(ApplicationDbContext db, FileStorage files) : Club
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PolicyNames.Admin)]
+    [Authorize(Policy = PolicyNames.GmOrAdmin)]
     public async Task<ActionResult<VenueDto>> Update(Guid id, SaveVenueRequest request, CancellationToken cancellationToken)
     {
         var venue = await db.Venues.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
@@ -35,7 +35,7 @@ public class VenuesController(ApplicationDbContext db, FileStorage files) : Club
     }
 
     [HttpPost("{id:guid}/photos")]
-    [Authorize(Policy = PolicyNames.Admin)]
+    [Authorize(Policy = PolicyNames.GmOrAdmin)]
     [RequestSizeLimit(12 * 1024 * 1024)]
     public async Task<ActionResult<VenueDto>> UploadPhotos(Guid id, IFormFile? inside, IFormFile? outside, CancellationToken cancellationToken)
     {
@@ -73,7 +73,7 @@ public class VenuesController(ApplicationDbContext db, FileStorage files) : Club
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PolicyNames.Admin)]
+    [Authorize(Policy = PolicyNames.GmOrAdmin)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var venue = await db.Venues.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);

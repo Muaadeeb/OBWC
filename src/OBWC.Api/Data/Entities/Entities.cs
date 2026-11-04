@@ -54,6 +54,7 @@ public class PlaySession : IOwnedResource
     public Guid? RuleSetId { get; set; }
     public RuleSet? RuleSet { get; set; }
     public List<SessionAttendance> Attendances { get; set; } = [];
+    public List<EventPhoto> Photos { get; set; } = [];
 
     string? IOwnedResource.OwnerUserId => CreatedByUserId;
 }
@@ -128,7 +129,9 @@ public class GamingGroup
     public Guid Id { get; set; }
     public string Name { get; set; } = "";
     public string? Description { get; set; }
+    public string? GameFocus { get; set; }
     public string? WebsiteUrl { get; set; }
+    public string? Contact { get; set; }
     public int SortOrder { get; set; }
 }
 
@@ -137,10 +140,27 @@ public class Convention
     public Guid Id { get; set; }
     public string Name { get; set; } = "";
     public string? Description { get; set; }
-    public string? WhenText { get; set; }
+    /// <summary>Calendar date the convention starts. Not a clock time.</summary>
+    public DateOnly? StartsOn { get; set; }
+    /// <summary>Calendar date the convention ends, when it spans more than one day.</summary>
+    public DateOnly? EndsOn { get; set; }
     public string? LocationText { get; set; }
     public string? WebsiteUrl { get; set; }
     public int SortOrder { get; set; }
+}
+
+public class EventPhoto : IOwnedResource
+{
+    public Guid Id { get; set; }
+    public Guid PlaySessionId { get; set; }
+    public PlaySession? PlaySession { get; set; }
+    public string Caption { get; set; } = "";
+    public string RelativePath { get; set; } = "";
+    public string ContentType { get; set; } = "";
+    public string OwnerUserId { get; set; } = "";
+    public DateTime CreatedAtUtc { get; set; }
+
+    string? IOwnedResource.OwnerUserId => OwnerUserId;
 }
 
 public class GalleryPhoto : IOwnedResource
@@ -165,6 +185,7 @@ public class ClubDocument
     public string FileName { get; set; } = "";
     public string RelativePath { get; set; } = "";
     public string ContentType { get; set; } = "";
+    public DocumentVisibility Visibility { get; set; } = DocumentVisibility.MembersOnly;
     public string OwnerUserId { get; set; } = "";
     public DateTime CreatedAtUtc { get; set; }
 }
@@ -189,5 +210,8 @@ public class Officer
     public string RoleTitle { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public string? TermLabel { get; set; }
+    public string? Contact { get; set; }
+    public string? PhotoPath { get; set; }
+    public string? PhotoContentType { get; set; }
     public int SortOrder { get; set; }
 }

@@ -1,0 +1,182 @@
+@page "/admin/officers"
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ClubApi Club
+@inject ApiOrigin Origin
+@inject ISnackbar Snackbar
+
+<PageTitle>Officers · OBWC</PageTitle>
+<h1>Officers</h1>
+<p class="lede">Enter the people elected at the May meeting. Name and title are required. Term, contact, photo, and display order are optional. The public About page reads this list.</p>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_officers.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No officers have been entered.</MudAlert>
+}
+else
+{
+    <MudTable Items="_officers" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Order</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>Title</MudTh>
+            <MudTh>Term</MudTh>
+            <MudTh>Contact</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Order">@context.SortOrder</MudTd>
+            <MudTd DataLabel="Name">@context.DisplayName</MudTd>
+            <MudTd DataLabel="Title">@context.RoleTitle</MudTd>
+            <MudTd DataLabel="Term">@(context.TermLabel ?? "—")</MudTd>
+            <MudTd DataLabel="Contact">@(context.Contact ?? "—")</MudTd>
+            <MudTd>
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => Edit(context)">Edit</MudButton>
+                <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Text" OnClick="() => Remove(context.Id)">Remove</MudButton>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+<MudPaper Class="pa-3 mt-4" Outlined="true">
+    <MudText Typo="Typo.subtitle1">@(_editing is null ? "Add an officer" : "Edit officer")</MudText>
+    <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Required="true" Class="mt-2" />
+    <MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Required="true" Class="mt-2" />
+    <MudTextField @bind-Value="_term" Label="Term" Variant="Variant.Outlined" Class="mt-2" />
+    <MudTextField @bind-Value="_contact" Label="Contact (optional)" Variant="Variant.Outlined" Class="mt-2" HelperText="Email, phone, or another way to reach this officer." />
+    <MudNumericField T="int" @bind-Value="_order" Label="Display order" Variant="Variant.Outlined" Class="mt-2" />
+    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">@(_editing is null ? "Add officer" : "Save officer")</MudButton>
+    @if (_editing is not null)
+    {
+        <MudButton Class="mt-3 ml-2" Variant="Variant.Text" OnClick="Clear">Cancel</MudButton>
+    }
+</MudPaper>
+
+@if (_editing is Guid photoId)
+{
+    var current = _officers.FirstOrDefault(officer => officer.Id == photoId);
+    <MudPaper Class="pa-3 mt-3" Outlined="true">
+        <MudText Typo="Typo.subtitle1">Photo for @(current?.DisplayName ?? "this officer")</MudText>
+        @if (!string.IsNullOrWhiteSpace(current?.PhotoUrl))
+        {
+            <img class="gallery-photo mt-2" src="@Origin.Absolute(current.PhotoUrl)" alt="" style="max-width:16rem" />
+        }
+        <div class="mt-3"><label>Photo <InputFile OnChange="OnPhoto" accept="image/png,image/jpeg,image/gif,image/webp" /></label></div>
+        <MudButton Class="mt-2" Variant="Variant.Outlined" Disabled="_busy || _photo is null" OnClick="UploadPhoto">Upload photo</MudButton>
+    </MudPaper>
+}
+
+@code {
+    private List<OfficerDto> _officers = [];
+    private Guid? _editing;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string _name = "";
+    private string _title = "";
+    private string _term = "";
+    private string _contact = "";
+    private int _order;
+    private IBrowserFile? _photo;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _officers = (await Club.GetOfficersAsync()).ToList(); _error = null; }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void Edit(OfficerDto officer)
+    {
+        _editing = officer.Id;
+        _name = officer.DisplayName;
+        _title = officer.RoleTitle;
+        _term = officer.TermLabel ?? "";
+        _contact = officer.Contact ?? "";
+        _order = officer.SortOrder;
+        _photo = null;
+    }
+
+    private void Clear()
+    {
+        _editing = null;
+        _name = _title = _term = _contact = "";
+        _order = 0;
+        _photo = null;
+    }
+
+    private void OnPhoto(InputFileChangeEventArgs args) => _photo = args.File;
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_title))
+        {
+            Snackbar.Add("Enter a name and a title.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        var request = new SaveOfficerRequest
+        {
+            DisplayName = _name.Trim(),
+            RoleTitle = _title.Trim(),
+            TermLabel = string.IsNullOrWhiteSpace(_term) ? null : _term.Trim(),
+            Contact = string.IsNullOrWhiteSpace(_contact) ? null : _contact.Trim(),
+            SortOrder = _order
+        };
+        try
+        {
+            if (_editing is Guid id)
+                await Club.UpdateOfficerAsync(id, request);
+            else
+            {
+                var created = await Club.CreateOfficerAsync(request);
+                _editing = created.Id;
+            }
+            await Load();
+            Snackbar.Add("Officer saved.", Severity.Success);
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task UploadPhoto()
+    {
+        if (_editing is not Guid id || _photo is null)
+            return;
+        _busy = true;
+        try
+        {
+            await using var stream = _photo.OpenReadStream(10 * 1024 * 1024);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            await Club.UploadOfficerPhotoAsync(id, buffer.ToArray(), _photo.Name);
+            _photo = null;
+            await Load();
+            Snackbar.Add("Photo saved.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Remove(Guid id)
+    {
+        try
+        {
+            await Club.DeleteOfficerAsync(id);
+            if (_editing == id)
+                Clear();
+            await Load();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

@@ -138,6 +138,7 @@ else
                             <MudText Typo="Typo.caption" Color="Color.Error">@ev.CancellationReason</MudText>
                         }
                         <MudText Typo="Typo.caption">Scheduled by @ev.OwnerDisplayName@(ev.OwnerIsGm ? " · GM" : "")</MudText>
+                        <EventPhotos EventId="ev.Id" CanAdd="ev.CanAddPhotos" Photos="ev.Photos" OnChanged="ReloadAsync" />
                         <MudStack Row="true" Spacing="1" Class="flex-wrap">
                             <MudChip T="string" Size="Size.Small" Color="Color.Success">Going @ev.Going</MudChip>
                             @if (ev.Waitlist > 0) { <MudChip T="string" Size="Size.Small" Color="Color.Info">Waitlist @ev.Waitlist</MudChip> }

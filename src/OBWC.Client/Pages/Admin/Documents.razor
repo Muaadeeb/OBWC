@@ -1,0 +1,172 @@
+@page "/admin/documents"
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ClubApi Club
+@inject ISnackbar Snackbar
+
+<PageTitle>Club documents · OBWC</PageTitle>
+<h1>Club documents</h1>
+<p class="lede">Upload, rename, or delete a PDF: constitution, budget, or minutes. Each file is members only unless you mark it public. Uploaded times are stored in UTC and shown as Central Time (CT).</p>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_docs.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No documents have been uploaded.</MudAlert>
+}
+else
+{
+    <MudTable Items="_docs" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Title</MudTh>
+            <MudTh>Category</MudTh>
+            <MudTh>Visibility</MudTh>
+            <MudTh>Uploaded (CT)</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Title">@context.Title</MudTd>
+            <MudTd DataLabel="Category">@context.Category</MudTd>
+            <MudTd DataLabel="Visibility">@(context.Visibility == DocumentVisibility.Public ? "Public" : "Members only")</MudTd>
+            <MudTd DataLabel="Uploaded (CT)">@ClubTime.FormatDateTime(AsUtc(context.CreatedAtUtc))</MudTd>
+            <MudTd>
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => Edit(context)">Rename</MudButton>
+                <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Text" OnClick="() => Remove(context.Id)">Delete</MudButton>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+<MudPaper Class="pa-3 mt-4" Outlined="true">
+    <MudText Typo="Typo.subtitle1">@(_editing is null ? "Upload a PDF" : "Rename document")</MudText>
+    <MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Required="true" Class="mt-2" />
+    <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined" Class="mt-2" />
+    <MudSelect T="DocumentCategory" @bind-Value="_category" Label="Category" Variant="Variant.Outlined" Class="mt-2">
+        <MudSelectItem Value="DocumentCategory.Constitution">Constitution</MudSelectItem>
+        <MudSelectItem Value="DocumentCategory.Budget">Budget</MudSelectItem>
+        <MudSelectItem Value="DocumentCategory.Minutes">Minutes</MudSelectItem>
+    </MudSelect>
+    <MudSelect T="DocumentVisibility" @bind-Value="_visibility" Label="Who can see it" Variant="Variant.Outlined" Class="mt-2">
+        <MudSelectItem Value="DocumentVisibility.MembersOnly">Members only</MudSelectItem>
+        <MudSelectItem Value="DocumentVisibility.Public">Public</MudSelectItem>
+    </MudSelect>
+    @if (_editing is null)
+    {
+        <div class="mt-3"><label>PDF <InputFile OnChange="OnFile" accept="application/pdf,.pdf" /></label></div>
+        <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy || _file is null" OnClick="Upload">Upload</MudButton>
+    }
+    else
+    {
+        <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Rename">Save</MudButton>
+        <MudButton Class="mt-3 ml-2" Variant="Variant.Text" OnClick="Clear">Cancel</MudButton>
+    }
+</MudPaper>
+
+@code {
+    private List<ClubDocumentDto> _docs = [];
+    private Guid? _editing;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string _title = "";
+    private string _description = "";
+    private DocumentCategory _category = DocumentCategory.Constitution;
+    private DocumentVisibility _visibility = DocumentVisibility.MembersOnly;
+    private IBrowserFile? _file;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _docs = (await Club.GetDocumentsAsync()).ToList(); _error = null; }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void OnFile(InputFileChangeEventArgs args) => _file = args.File;
+
+    private void Edit(ClubDocumentDto doc)
+    {
+        _editing = doc.Id;
+        _title = doc.Title;
+        _description = doc.Description ?? "";
+        _category = doc.Category;
+        _visibility = doc.Visibility;
+        _file = null;
+    }
+
+    private void Clear()
+    {
+        _editing = null;
+        _title = _description = "";
+        _category = DocumentCategory.Constitution;
+        _visibility = DocumentVisibility.MembersOnly;
+        _file = null;
+    }
+
+    private async Task Upload()
+    {
+        if (_file is null || string.IsNullOrWhiteSpace(_title))
+        {
+            Snackbar.Add("Enter a title and choose a PDF.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await using var stream = _file.OpenReadStream(10 * 1024 * 1024);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            await Club.UploadDocumentAsync(_category, _title.Trim(), Blank(_description), _visibility, buffer.ToArray(), _file.Name);
+            Clear();
+            await Load();
+            Snackbar.Add("Document uploaded.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Rename()
+    {
+        if (_editing is not Guid id || string.IsNullOrWhiteSpace(_title))
+            return;
+        _busy = true;
+        try
+        {
+            await Club.RenameDocumentAsync(id, new RenameDocumentRequest
+            {
+                Title = _title.Trim(),
+                Description = Blank(_description),
+                Category = _category,
+                Visibility = _visibility
+            });
+            Clear();
+            await Load();
+            Snackbar.Add("Document updated.", Severity.Success);
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Remove(Guid id)
+    {
+        try
+        {
+            await Club.DeleteDocumentAsync(id);
+            if (_editing == id) Clear();
+            await Load();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private static string? Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static DateTimeOffset AsUtc(DateTime value) =>
+        new(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero);
+}

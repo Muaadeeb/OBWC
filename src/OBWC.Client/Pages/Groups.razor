@@ -1,10 +1,9 @@
 @page "/groups"
 @inject ClubApi Club
-@inject ISnackbar Snackbar
 
 <PageTitle>Other Area Gaming Groups · OBWC</PageTitle>
 <h1>Other Area Gaming Groups</h1>
-<p class="lede">Groups the club wants visitors to know about. NADBAG is listed from the club page list. Add the rest when the wording is ready.</p>
+<p class="lede">Groups the club wants visitors to know about.</p>
 
 @if (_loading)
 {
@@ -24,115 +23,36 @@ else
         @foreach (var group in _groups)
         {
             <MudExpansionPanel Text="@group.Name">
-                @if (string.IsNullOrWhiteSpace(group.Description))
+                @if (!string.IsNullOrWhiteSpace(group.GameFocus))
                 {
-                    <p class="mud-text-secondary">No description has been entered yet.</p>
+                    <p><strong>Games:</strong> @group.GameFocus</p>
                 }
-                else
+                @if (!string.IsNullOrWhiteSpace(group.Description))
                 {
                     <p style="white-space:pre-wrap">@group.Description</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(group.Contact))
+                {
+                    <p>@group.Contact</p>
                 }
                 @if (!string.IsNullOrWhiteSpace(group.WebsiteUrl))
                 {
                     <MudLink Href="@group.WebsiteUrl" Target="_blank">@group.WebsiteUrl</MudLink>
                 }
-                <AuthorizeView Roles="Admin,SuperAdmin">
-                    <Authorized>
-                        <div class="mt-2">
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Edit(group)">Edit</MudButton>
-                            <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Remove(group.Id)">Remove</MudButton>
-                        </div>
-                    </Authorized>
-                </AuthorizeView>
             </MudExpansionPanel>
         }
     </MudExpansionPanels>
 }
 
-<AuthorizeView Roles="Admin,SuperAdmin">
-    <Authorized>
-        <MudPaper Class="pa-3 mt-3" Outlined="true">
-            <MudText Typo="Typo.subtitle1">@(_editing is null ? "Add a group" : "Edit group")</MudText>
-            <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Required="true" Class="mt-2" />
-            <MudTextField @bind-Value="_body" Label="Description" Variant="Variant.Outlined" Lines="3" Class="mt-2" />
-            <MudTextField @bind-Value="_url" Label="Website" Variant="Variant.Outlined" Class="mt-2" />
-            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">@(_editing is null ? "Add group" : "Save group")</MudButton>
-            @if (_editing is not null)
-            {
-                <MudButton Class="mt-3 ml-2" Variant="Variant.Text" OnClick="Clear">Cancel</MudButton>
-            }
-        </MudPaper>
-    </Authorized>
-</AuthorizeView>
-
 @code {
     private List<GroupDto> _groups = [];
-    private Guid? _editing;
     private bool _loading = true;
-    private bool _busy;
     private string? _error;
-    private string _name = "", _body = "", _url = "";
 
-    protected override async Task OnInitializedAsync() => await Load();
-
-    private async Task Load()
+    protected override async Task OnInitializedAsync()
     {
-        _loading = true;
         try { _groups = (await Club.GetGroupsAsync()).ToList(); }
         catch (ClubApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
-    }
-
-    private void Edit(GroupDto group)
-    {
-        _editing = group.Id;
-        _name = group.Name;
-        _body = group.Description ?? "";
-        _url = group.WebsiteUrl ?? "";
-    }
-
-    private void Clear()
-    {
-        _editing = null;
-        _name = _body = _url = "";
-    }
-
-    private async Task Save()
-    {
-        if (string.IsNullOrWhiteSpace(_name))
-        {
-            Snackbar.Add("Enter a group name.", Severity.Warning);
-            return;
-        }
-        _busy = true;
-        var request = new SaveGroupRequest
-        {
-            Name = _name.Trim(),
-            Description = string.IsNullOrWhiteSpace(_body) ? null : _body.Trim(),
-            WebsiteUrl = string.IsNullOrWhiteSpace(_url) ? null : _url.Trim()
-        };
-        try
-        {
-            if (_editing is Guid id)
-                await Club.UpdateGroupAsync(id, request);
-            else
-                await Club.CreateGroupAsync(request);
-            Clear();
-            await Load();
-            Snackbar.Add("Group saved.", Severity.Success);
-        }
-        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
-        finally { _busy = false; }
-    }
-
-    private async Task Remove(Guid id)
-    {
-        try
-        {
-            await Club.DeleteGroupAsync(id);
-            if (_editing == id) Clear();
-            await Load();
-        }
-        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
 }

@@ -61,11 +61,15 @@ public class SeedTests(ApiFactory factory) : IClassFixture<ApiFactory>, IDisposa
         var nadbag = Assert.Single(groups!);
         Assert.Equal("NADBAG", nadbag.Name);
         Assert.Contains("ASL", nadbag.Description, StringComparison.Ordinal);
+        Assert.Null(nadbag.GameFocus);
+        Assert.Null(nadbag.Contact);
+        Assert.Null(nadbag.WebsiteUrl);
 
         var conventions = await _api.Client.GetFromJsonAsync<List<ConventionDto>>("/api/conventions");
         Assert.Contains(conventions!, convention => convention.Name == "Nuke-Con");
         Assert.Contains(conventions!, convention => convention.Name == "ScroogeCon");
         Assert.DoesNotContain(conventions!, convention => !string.IsNullOrWhiteSpace(convention.LocationText));
+        Assert.DoesNotContain(conventions!, convention => convention.StartsOn is not null || convention.EndsOn is not null);
 
         var info = await _api.Client.GetFromJsonAsync<PublicInfoDto>("/api/settings/public");
         Assert.Equal("nmh16055@gmail.com", info!.ContactEmail);

@@ -33,5 +33,14 @@ public enum AttendanceStatus
 public enum DocumentCategory
 {
     Constitution,
-    Budget
+    Budget,
+    Minutes
+}
+
+/// <summary>Who may see a club document. New uploads default to members only.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum DocumentVisibility
+{
+    MembersOnly,
+    Public
 }

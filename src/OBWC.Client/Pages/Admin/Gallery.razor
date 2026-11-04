@@ -1,0 +1,145 @@
+@page "/admin/gallery"
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ClubApi Club
+@inject ApiOrigin Origin
+@inject ISnackbar Snackbar
+
+<PageTitle>Gallery · OBWC</PageTitle>
+<h1>Image gallery</h1>
+<p class="lede">Admins upload and manage the public gallery of OBWC games at public events. At most @(_gallery?.MaxPhotos ?? 100) photos. Game photos that belong to one night are attached on the schedule, not here.</p>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_gallery is null || _gallery.Photos.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">The gallery is empty.</MudAlert>
+}
+else
+{
+    <div class="link-grid">
+        @foreach (var photo in _gallery.Photos)
+        {
+            <figure class="catalog-card">
+                <img class="gallery-photo" src="@Origin.Absolute(photo.Url)" alt="@photo.Caption" />
+                <figcaption>
+                    <strong>@photo.Caption</strong><br />
+                    @photo.PublicEventName<br />
+                    <span class="mud-text-secondary">@ClubTime.FormatDateTime(AsUtc(photo.CreatedAtUtc))</span>
+                </figcaption>
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => BeginEdit(photo)">Edit</MudButton>
+                <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Remove(photo.Id)">Delete</MudButton>
+            </figure>
+        }
+    </div>
+}
+
+<MudPaper Class="pa-3 mt-4" Outlined="true">
+    <MudText Typo="Typo.subtitle1">@(_editing is null ? "Upload a public-event photo" : "Edit gallery photo")</MudText>
+    <MudTextField @bind-Value="_caption" Label="Caption" Variant="Variant.Outlined" Required="true" Class="mt-2" />
+    <MudTextField @bind-Value="_eventName" Label="Public event" Variant="Variant.Outlined" Required="true" Class="mt-2" HelperText="Game day, Nuke-Con, NADBAG, ScroogeCon, or another public event." />
+    @if (_editing is null)
+    {
+        <div class="mt-3"><label>Photo <InputFile OnChange="OnFile" accept="image/png,image/jpeg,image/gif,image/webp" /></label></div>
+    }
+    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">@(_editing is null ? "Upload" : "Save")</MudButton>
+    @if (_editing is not null)
+    {
+        <MudButton Class="mt-3 ml-2" Variant="Variant.Text" OnClick="Clear">Cancel</MudButton>
+    }
+</MudPaper>
+
+@code {
+    private GalleryListDto? _gallery;
+    private Guid? _editing;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string _caption = "";
+    private string _eventName = "";
+    private IBrowserFile? _file;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _gallery = await Club.GetGalleryAsync(); _error = null; }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void OnFile(InputFileChangeEventArgs args) => _file = args.File;
+
+    private void BeginEdit(GalleryPhotoDto photo)
+    {
+        _editing = photo.Id;
+        _caption = photo.Caption;
+        _eventName = photo.PublicEventName;
+        _file = null;
+    }
+
+    private void Clear()
+    {
+        _editing = null;
+        _caption = _eventName = "";
+        _file = null;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_caption) || string.IsNullOrWhiteSpace(_eventName))
+        {
+            Snackbar.Add("Enter a caption and the public event.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        try
+        {
+            if (_editing is Guid id)
+            {
+                await Club.UpdatePhotoAsync(id, new UpdateGalleryPhotoRequest
+                {
+                    Caption = _caption.Trim(),
+                    PublicEventName = _eventName.Trim()
+                });
+            }
+            else
+            {
+                if (_file is null)
+                {
+                    Snackbar.Add("Choose a photo.", Severity.Warning);
+                    return;
+                }
+                await using var stream = _file.OpenReadStream(10 * 1024 * 1024);
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer);
+                await Club.UploadPhotoAsync(_caption.Trim(), _eventName.Trim(), buffer.ToArray(), _file.Name);
+            }
+            Clear();
+            Snackbar.Add("Gallery updated.", Severity.Success);
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Remove(Guid id)
+    {
+        try
+        {
+            await Club.DeletePhotoAsync(id);
+            if (_editing == id) Clear();
+            await Load();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private static DateTimeOffset AsUtc(DateTime value) =>
+        new(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero);
+}

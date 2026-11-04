@@ -1,7 +1,7 @@
 namespace OBWC.Api.Controllers;
 
 [ApiController]
-public class SiteController(ApplicationDbContext db, IClubMailer mail, IHostEnvironment environment) : ClubApiController
+public class SiteController(ApplicationDbContext db, IClubMailer mail, IHostEnvironment environment, FileStorage files) : ClubApiController
 {
     [HttpGet("api/settings/public")]
     [AllowAnonymous]
@@ -66,6 +66,8 @@ public class SiteController(ApplicationDbContext db, IClubMailer mail, IHostEnvi
                 RoleTitle = officer.RoleTitle,
                 DisplayName = officer.DisplayName,
                 TermLabel = officer.TermLabel,
+                Contact = officer.Contact,
+                PhotoUrl = officer.PhotoPath == null ? null : $"api/files/officers/{officer.Id}",
                 SortOrder = officer.SortOrder
             })
             .ToListAsync(cancellationToken));
@@ -100,9 +102,35 @@ public class SiteController(ApplicationDbContext db, IClubMailer mail, IHostEnvi
         var officer = await db.Officers.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (officer is null)
             return NotFound();
+        var photoPath = officer.PhotoPath;
         db.Officers.Remove(officer);
         await db.SaveChangesAsync(cancellationToken);
+        files.Delete(photoPath);
         return NoContent();
+    }
+
+    [HttpPost("api/officers/{id:guid}/photo")]
+    [Authorize(Policy = PolicyNames.Admin)]
+    [RequestSizeLimit(12 * 1024 * 1024)]
+    public async Task<ActionResult<OfficerDto>> UploadOfficerPhoto(Guid id, IFormFile file, CancellationToken cancellationToken)
+    {
+        var officer = await db.Officers.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (officer is null)
+            return NotFound();
+        try
+        {
+            var stored = await files.SaveAsync(file, "officers", FileStorage.ImageExtensions, cancellationToken);
+            files.Delete(officer.PhotoPath);
+            officer.PhotoPath = stored.RelativePath;
+            officer.PhotoContentType = stored.ContentType;
+        }
+        catch (InvalidUploadException ex)
+        {
+            return Bad(ex.Message);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(MapOfficer(officer));
     }
 
     [HttpPost("api/contact")]
@@ -182,6 +210,7 @@ public class SiteController(ApplicationDbContext db, IClubMailer mail, IHostEnvi
         officer.RoleTitle = request.RoleTitle.Trim();
         officer.DisplayName = request.DisplayName.Trim();
         officer.TermLabel = Clean(request.TermLabel);
+        officer.Contact = Clean(request.Contact);
         officer.SortOrder = request.SortOrder;
     }
 
@@ -191,6 +220,8 @@ public class SiteController(ApplicationDbContext db, IClubMailer mail, IHostEnvi
         RoleTitle = officer.RoleTitle,
         DisplayName = officer.DisplayName,
         TermLabel = officer.TermLabel,
+        Contact = officer.Contact,
+        PhotoUrl = officer.PhotoPath is null ? null : $"api/files/officers/{officer.Id}",
         SortOrder = officer.SortOrder
     };
 }

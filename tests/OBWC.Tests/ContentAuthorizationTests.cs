@@ -50,25 +50,16 @@ public class ContentAuthorizationTests(ApiFactory factory) : IClassFixture<ApiFa
         Assert.Contains(stores!, store => store.Name == "Rad Comics and Collectibles");
 
         var anonymousDocs = await _api.Client.GetAsync("/api/documents?category=Constitution");
-        Assert.Equal(HttpStatusCode.Unauthorized, anonymousDocs.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, anonymousDocs.StatusCode);
+        Assert.Empty((await anonymousDocs.Content.ReadFromJsonAsync<List<ClubDocumentDto>>())!);
         var memberDocs = await memberClient.GetFromJsonAsync<List<ClubDocumentDto>>("/api/documents?category=Constitution");
         Assert.Empty(memberDocs!);
 
-        using var upload = new MultipartFormDataContent();
-        var file = new ByteArrayContent("Club constitution draft."u8.ToArray());
-        file.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
-        upload.Add(file, "file", "constitution.txt");
-        upload.Add(new StringContent("OBWC Constitution"), "title");
-        upload.Add(new StringContent("Constitution"), "category");
+        using var upload = PdfUpload("constitution.pdf");
         var memberUpload = await memberClient.PostAsync("/api/documents", upload);
         Assert.Equal(HttpStatusCode.Forbidden, memberUpload.StatusCode);
 
-        using var adminUpload = new MultipartFormDataContent();
-        var adminFile = new ByteArrayContent("Club constitution draft."u8.ToArray());
-        adminFile.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
-        adminUpload.Add(adminFile, "file", "constitution.txt");
-        adminUpload.Add(new StringContent("OBWC Constitution"), "title");
-        adminUpload.Add(new StringContent("Constitution"), "category");
+        using var adminUpload = PdfUpload("constitution.pdf");
         var uploaded = await adminClient.PostAsync("/api/documents", adminUpload);
         Assert.Equal(HttpStatusCode.Created, uploaded.StatusCode);
         var document = await uploaded.Content.ReadFromJsonAsync<ClubDocumentDto>();
@@ -99,6 +90,17 @@ public class ContentAuthorizationTests(ApiFactory factory) : IClassFixture<ApiFa
         var full = await _api.Client.GetFromJsonAsync<GalleryListDto>("/api/gallery");
         Assert.Equal(2, full!.Count);
         Assert.Equal(100, GalleryLimits.MaxPhotos);
+    }
+
+    private static MultipartFormDataContent PdfUpload(string fileName)
+    {
+        var content = new MultipartFormDataContent();
+        var bytes = new ByteArrayContent("%PDF-1.4\nClub constitution draft.\n%%EOF"u8.ToArray());
+        bytes.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        content.Add(bytes, "file", fileName);
+        content.Add(new StringContent("OBWC Constitution"), "title");
+        content.Add(new StringContent("Constitution"), "category");
+        return content;
     }
 
     private static MultipartFormDataContent Photo(string caption, string publicEvent)

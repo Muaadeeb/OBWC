@@ -72,6 +72,19 @@ public class GalleryController(
         return Created($"/api/gallery/{photo.Id}", Map(photo));
     }
 
+    [HttpPut("{id:guid}")]
+    [Authorize(Policy = PolicyNames.Admin)]
+    public async Task<ActionResult<GalleryPhotoDto>> Update(Guid id, UpdateGalleryPhotoRequest request, CancellationToken cancellationToken)
+    {
+        var photo = await db.GalleryPhotos.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (photo is null)
+            return NotFound();
+        photo.Caption = request.Caption.Trim();
+        photo.PublicEventName = request.PublicEventName.Trim();
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(Map(photo));
+    }
+
     [HttpDelete("{id:guid}")]
     [Authorize(Policy = PolicyNames.Admin)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)

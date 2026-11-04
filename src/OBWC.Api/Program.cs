@@ -67,6 +67,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole(RoleNames.SuperAdmin));
     options.AddPolicy(PolicyNames.OwnerOrAdmin, policy =>
         policy.Requirements.Add(new OwnedResourceRequirement()));
+    options.AddPolicy(PolicyNames.GmOrAdmin, policy =>
+        policy.RequireRole(RoleNames.Gm, RoleNames.Admin, RoleNames.SuperAdmin));
 });
 builder.Services.AddSingleton<IAuthorizationHandler, OwnedResourceHandler>();
 

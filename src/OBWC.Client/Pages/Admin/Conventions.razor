@@ -1,0 +1,156 @@
+@page "/admin/conventions"
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ClubApi Club
+@inject ISnackbar Snackbar
+
+<PageTitle>Conventions · OBWC</PageTitle>
+<h1>Conventions</h1>
+<p class="lede">Name, dates, location, URL, and description. Dates are calendar dates. Empty fields stay off the public list.</p>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_items.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No conventions have been entered.</MudAlert>
+}
+else
+{
+    <MudSimpleTable Hover="true" Dense="true">
+        <thead><tr><th>Name</th><th>Dates</th><th>Location</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var item in _items)
+        {
+            <tr>
+                <td>@item.Name</td>
+                <td>@(DateLabel(item) ?? "—")</td>
+                <td>@(item.LocationText ?? "—")</td>
+                <td>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => Edit(item)">Edit</MudButton>
+                    <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Text" OnClick="() => Remove(item.Id)">Remove</MudButton>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </MudSimpleTable>
+}
+
+<MudPaper Class="pa-3 mt-4" Outlined="true">
+    <MudText Typo="Typo.subtitle1">@(_editing is null ? "Add a convention" : "Edit convention")</MudText>
+    <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Required="true" Class="mt-2" />
+    <MudDatePicker @bind-Date="_start" Label="Start date" Variant="Variant.Outlined" Class="mt-2" />
+    <MudDatePicker @bind-Date="_end" Label="End date" Variant="Variant.Outlined" Class="mt-2" />
+    <MudTextField @bind-Value="_where" Label="Location" Variant="Variant.Outlined" Class="mt-2" />
+    <MudTextField @bind-Value="_url" Label="URL" Variant="Variant.Outlined" Class="mt-2" />
+    <MudTextField @bind-Value="_body" Label="Description" Variant="Variant.Outlined" Lines="3" Class="mt-2" />
+    <MudNumericField T="int" @bind-Value="_order" Label="Display order" Variant="Variant.Outlined" Class="mt-2" />
+    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">@(_editing is null ? "Add convention" : "Save convention")</MudButton>
+    @if (_editing is not null)
+    {
+        <MudButton Class="mt-3 ml-2" Variant="Variant.Text" OnClick="Clear">Cancel</MudButton>
+    }
+</MudPaper>
+
+@code {
+    private List<ConventionDto> _items = [];
+    private Guid? _editing;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string _name = "";
+    private string _body = "";
+    private string _where = "";
+    private string _url = "";
+    private DateTime? _start;
+    private DateTime? _end;
+    private int _order;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _items = (await Club.GetConventionsAsync()).ToList(); _error = null; }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void Edit(ConventionDto item)
+    {
+        _editing = item.Id;
+        _name = item.Name;
+        _body = item.Description ?? "";
+        _where = item.LocationText ?? "";
+        _url = item.WebsiteUrl ?? "";
+        _start = item.StartsOn?.ToDateTime(TimeOnly.MinValue);
+        _end = item.EndsOn?.ToDateTime(TimeOnly.MinValue);
+        _order = item.SortOrder;
+    }
+
+    private void Clear()
+    {
+        _editing = null;
+        _name = _body = _where = _url = "";
+        _start = _end = null;
+        _order = 0;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Enter a convention name.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        var request = new SaveConventionRequest
+        {
+            Name = _name.Trim(),
+            Description = Blank(_body),
+            StartsOn = _start is null ? null : DateOnly.FromDateTime(_start.Value),
+            EndsOn = _end is null ? null : DateOnly.FromDateTime(_end.Value),
+            LocationText = Blank(_where),
+            WebsiteUrl = Blank(_url),
+            SortOrder = _order
+        };
+        try
+        {
+            if (_editing is Guid id)
+                await Club.UpdateConventionAsync(id, request);
+            else
+                await Club.CreateConventionAsync(request);
+            Clear();
+            await Load();
+            Snackbar.Add("Convention saved.", Severity.Success);
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Remove(Guid id)
+    {
+        try
+        {
+            await Club.DeleteConventionAsync(id);
+            if (_editing == id) Clear();
+            await Load();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private static string? Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? DateLabel(ConventionDto item)
+    {
+        if (item.StartsOn is null && item.EndsOn is null)
+            return null;
+        if (item.StartsOn is DateOnly start && item.EndsOn is DateOnly end && end != start)
+            return $"{start:MMM d, yyyy} – {end:MMM d, yyyy}";
+        return (item.StartsOn ?? item.EndsOn)?.ToString("MMM d, yyyy");
+    }
+}

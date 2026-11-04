@@ -16,6 +16,7 @@ public static class PolicyNames
     public const string Admin = "Admin";
     public const string SuperAdmin = "SuperAdmin";
     public const string OwnerOrAdmin = "OwnerOrAdmin";
+    public const string GmOrAdmin = "GmOrAdmin";
 }
 
 public static class GalleryLimits

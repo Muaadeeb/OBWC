@@ -50,17 +50,30 @@
             <MudNavLink Href="/groups" Icon="@Icons.Material.Filled.Groups">Area Groups</MudNavLink>
             <MudNavLink Href="/conventions" Icon="@Icons.Material.Filled.Festival">Conventions</MudNavLink>
             <MudNavLink Href="/contact" Icon="@Icons.Material.Filled.Email">Contact Us</MudNavLink>
+            <MudNavLink Href="/documents" Icon="@Icons.Material.Filled.Description">Documents</MudNavLink>
             <AuthorizeView Roles="Member,Admin,SuperAdmin">
                 <Authorized>
                     <MudText Typo="Typo.overline" Class="px-4 pt-3">Members</MudText>
                     <MudNavLink Href="/my-schedule" Icon="@Icons.Material.Filled.EventAvailable">My schedule</MudNavLink>
                     <MudNavLink Href="/members/constitution" Icon="@Icons.Material.Filled.Gavel">Constitution</MudNavLink>
                     <MudNavLink Href="/members/budget" Icon="@Icons.Material.Filled.AccountBalance">Budget</MudNavLink>
+                    <MudNavLink Href="/members/minutes" Icon="@Icons.Material.Filled.Article">Minutes</MudNavLink>
+                </Authorized>
+            </AuthorizeView>
+            <AuthorizeView Roles="GM,Admin,SuperAdmin">
+                <Authorized>
+                    <MudText Typo="Typo.overline" Class="px-4 pt-3">Maintain</MudText>
+                    <MudNavLink Href="/admin/venues" Icon="@Icons.Material.Filled.EditLocation">Venues</MudNavLink>
                 </Authorized>
             </AuthorizeView>
             <AuthorizeView Roles="Admin,SuperAdmin">
                 <Authorized>
                     <MudText Typo="Typo.overline" Class="px-4 pt-3">Admin</MudText>
+                    <MudNavLink Href="/admin/officers" Icon="@Icons.Material.Filled.Badge">Officers</MudNavLink>
+                    <MudNavLink Href="/admin/gallery" Icon="@Icons.Material.Filled.PhotoLibrary">Gallery</MudNavLink>
+                    <MudNavLink Href="/admin/conventions" Icon="@Icons.Material.Filled.Festival">Conventions</MudNavLink>
+                    <MudNavLink Href="/admin/groups" Icon="@Icons.Material.Filled.Groups">Area groups</MudNavLink>
+                    <MudNavLink Href="/admin/documents" Icon="@Icons.Material.Filled.UploadFile">Documents</MudNavLink>
                     <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.ManageAccounts">Users &amp; roles</MudNavLink>
                 </Authorized>
             </AuthorizeView>

@@ -1,0 +1,84 @@
+@inject ClubApi Club
+@inject ApiOrigin Origin
+@inject ISnackbar Snackbar
+
+@if (Photos.Count > 0 || CanAdd)
+{
+    <div class="mt-2">
+        <MudText Typo="Typo.subtitle2">Game photos</MudText>
+        @if (Photos.Count > 0)
+        {
+            <div class="link-grid">
+                @foreach (var photo in Photos)
+                {
+                    <figure class="catalog-card">
+                        <img class="gallery-photo" src="@Origin.Absolute(photo.Url)" alt="@photo.Caption" />
+                        <figcaption>
+                            <strong>@photo.Caption</strong><br />
+                            <span class="mud-text-secondary">@ClubTime.FormatDateTime(AsUtc(photo.CreatedAtUtc))</span>
+                        </figcaption>
+                        @if (photo.CanEdit)
+                        {
+                            <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Text" OnClick="() => Remove(photo)">Delete</MudButton>
+                        }
+                    </figure>
+                }
+            </div>
+        }
+        @if (CanAdd)
+        {
+            <MudTextField @bind-Value="_caption" Label="Photo caption" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" />
+            <div class="mt-1"><label>Photo <InputFile OnChange="OnFile" accept="image/png,image/jpeg,image/gif,image/webp" /></label></div>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Class="mt-1" Disabled="_busy" OnClick="Upload">Add photo</MudButton>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid EventId { get; set; }
+    [Parameter] public bool CanAdd { get; set; }
+    [Parameter] public IReadOnlyList<EventPhotoDto> Photos { get; set; } = [];
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string _caption = "";
+    private IBrowserFile? _file;
+    private bool _busy;
+
+    private void OnFile(InputFileChangeEventArgs args) => _file = args.File;
+
+    private async Task Upload()
+    {
+        if (string.IsNullOrWhiteSpace(_caption) || _file is null)
+        {
+            Snackbar.Add("Enter a caption and choose a photo.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await using var stream = _file.OpenReadStream(10 * 1024 * 1024);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            await Club.UploadEventPhotoAsync(EventId, _caption.Trim(), buffer.ToArray(), _file.Name);
+            _caption = "";
+            _file = null;
+            Snackbar.Add("Photo added.", Severity.Success);
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Remove(EventPhotoDto photo)
+    {
+        try
+        {
+            await Club.DeleteEventPhotoAsync(EventId, photo.Id);
+            await OnChanged.InvokeAsync();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private static DateTimeOffset AsUtc(DateTime value) =>
+        new(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero);
+}
