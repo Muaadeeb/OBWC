@@ -5,51 +5,219 @@
 
 <PageTitle>Games People Play and Rules They Follow · OBWC</PageTitle>
 <h1>Games People Play and Rules They Follow</h1>
-<p class="lede">A way for new people to see who plays a rule set, and for members to find players.</p>
-<MudTextField @bind-Value="_filter" Label="Find a rule set" Variant="Variant.Outlined" Class="mb-3" Immediate="true" />
-<MudExpansionPanels>
-    @foreach (var rule in Filtered)
+<p class="lede">A way for new people to see who plays a rule set, and for members to find players. Names under “From the club list” come from the club’s page list. Members can add themselves.</p>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else
+{
+    <MudTextField @bind-Value="_filter" Label="Find a rule set" Variant="Variant.Outlined" Class="mb-3" Immediate="true" />
+    @if (!Filtered.Any())
     {
-        <MudExpansionPanel Text="@rule.Name">
-            @if (!string.IsNullOrWhiteSpace(rule.PublishedPlayers))
-            {
-                <p>From the club list: @rule.PublishedPlayers</p>
-            }
-            @foreach (var player in rule.Players)
-            {
-                <p><strong>@player.DisplayName</strong> @player.Note</p>
-            }
-            <AuthorizeView Roles="Member,Admin,SuperAdmin">
-                <Authorized>
-                    @if (_me is not null && rule.Players.All(player => player.OwnerUserId != _me))
-                    {
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Play(rule.Id)">I play this</MudButton>
-                    }
-                </Authorized>
-            </AuthorizeView>
-        </MudExpansionPanel>
+        <MudAlert Severity="Severity.Info">No rule set matches that search.</MudAlert>
     }
-</MudExpansionPanels>
+    <MudExpansionPanels>
+        @foreach (var rule in Filtered)
+        {
+            <MudExpansionPanel Text="@rule.Name">
+                @if (!string.IsNullOrWhiteSpace(rule.PublishedPlayers))
+                {
+                    <p>From the club list: @rule.PublishedPlayers</p>
+                }
+                else
+                {
+                    <p class="mud-text-secondary">No names from the club list are stored for this rule set.</p>
+                }
+                @if (rule.Players.Count == 0)
+                {
+                    <p class="mud-text-secondary">No member has added themselves yet.</p>
+                }
+                @foreach (var player in rule.Players)
+                {
+                    <div class="mb-2">
+                        <strong>@player.DisplayName</strong>
+                        @if (!string.IsNullOrWhiteSpace(player.Note))
+                        {
+                            <span> — @player.Note</span>
+                        }
+                        @if (player.CanEdit)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => StartNote(player)">Edit my note</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="() => RemovePlayer(rule, player)">Remove me</MudButton>
+                        }
+                    </div>
+                }
+                <AuthorizeView Roles="Member,Admin,SuperAdmin">
+                    <Authorized>
+                        @if (_me is not null && rule.Players.All(player => player.OwnerUserId != _me))
+                        {
+                            <MudTextField T="string" Value="@NoteFor(rule.Id)" ValueChanged="value => SetNote(rule.Id, value)" Label="Note (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2" OnClick="() => Play(rule)">I play this</MudButton>
+                        }
+                    </Authorized>
+                </AuthorizeView>
+                @if (_editingNote == rule.Players.FirstOrDefault(player => player.CanEdit && player.OwnerUserId == _me)?.Id)
+                {
+                    <MudTextField @bind-Value="_noteDraft" Label="Your note" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" />
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Class="mt-2" OnClick="() => SaveNote(rule)">Save note</MudButton>
+                }
+                <AuthorizeView Roles="Admin,SuperAdmin">
+                    <Authorized>
+                        <MudDivider Class="my-3" />
+                        <MudText Typo="Typo.subtitle2">Maintain this rule set</MudText>
+                        <MudTextField T="string" Value="@NameFor(rule)" ValueChanged="value => _names[rule.Id] = value" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        <MudTextField T="string" Value="@PublishedFor(rule)" ValueChanged="value => _published[rule.Id] = value" Label="Names from the club list" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Class="mt-2" OnClick="() => SaveRule(rule)">Save rule set</MudButton>
+                    </Authorized>
+                </AuthorizeView>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+    <AuthorizeView Roles="Admin,SuperAdmin">
+        <Authorized>
+            <MudPaper Class="pa-3 mt-4" Outlined="true">
+                <MudText Typo="Typo.subtitle1">Add a rule set</MudText>
+                <MudTextField @bind-Value="_newName" Label="Name" Variant="Variant.Outlined" Required="true" />
+                <MudTextField @bind-Value="_newPlayers" Label="Names from the club list" Variant="Variant.Outlined" Class="mt-2" />
+                <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="AddRule">Add</MudButton>
+            </MudPaper>
+        </Authorized>
+    </AuthorizeView>
+}
 
 @code {
     private List<RuleSetDto> _rules = [];
     private string _filter = "";
     private string? _me;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string _newName = "";
+    private string _newPlayers = "";
+    private string _noteDraft = "";
+    private Guid? _editingNote;
+    private readonly Dictionary<Guid, string> _notes = [];
+    private readonly Dictionary<Guid, string> _names = [];
+    private readonly Dictionary<Guid, string> _published = [];
     private IEnumerable<RuleSetDto> Filtered => _rules.Where(rule => rule.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase));
+
+    private string NoteFor(Guid id) => _notes.TryGetValue(id, out var note) ? note : "";
+
+    private void SetNote(Guid id, string value) => _notes[id] = value;
+
+    private string NameFor(RuleSetDto rule) => _names.TryGetValue(rule.Id, out var name) ? name : rule.Name;
+
+    private string PublishedFor(RuleSetDto rule) => _published.TryGetValue(rule.Id, out var published) ? published : rule.PublishedPlayers ?? "";
 
     protected override async Task OnInitializedAsync()
     {
-        _rules = (await Club.GetRuleSetsAsync()).ToList();
-        _me = (await Auth.MeAsync())?.Id;
+        try
+        {
+            _rules = (await Club.GetRuleSetsAsync()).ToList();
+            _me = (await Auth.MeAsync())?.Id;
+        }
+        catch (ClubApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
-    private async Task Play(Guid id)
+    private async Task Reload()
+    {
+        _rules = (await Club.GetRuleSetsAsync()).ToList();
+    }
+
+    private async Task Play(RuleSetDto rule)
     {
         try
         {
-            await Club.AddPlayerAsync(id, new SavePlayerRequest());
-            _rules = (await Club.GetRuleSetsAsync()).ToList();
+            _notes.TryGetValue(rule.Id, out var note);
+            await Club.AddPlayerAsync(rule.Id, new SavePlayerRequest { Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim() });
+            _notes.Remove(rule.Id);
+            await Reload();
         }
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private void StartNote(RuleSetPlayerDto player)
+    {
+        _editingNote = player.Id;
+        _noteDraft = player.Note ?? "";
+    }
+
+    private async Task SaveNote(RuleSetDto rule)
+    {
+        var player = rule.Players.FirstOrDefault(item => item.Id == _editingNote);
+        if (player is null)
+            return;
+        try
+        {
+            await Club.UpdatePlayerAsync(rule.Id, player.Id, new SavePlayerRequest { Note = string.IsNullOrWhiteSpace(_noteDraft) ? null : _noteDraft.Trim() });
+            _editingNote = null;
+            await Reload();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task RemovePlayer(RuleSetDto rule, RuleSetPlayerDto player)
+    {
+        try
+        {
+            await Club.DeletePlayerAsync(rule.Id, player.Id);
+            await Reload();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task SaveRule(RuleSetDto rule)
+    {
+        _names.TryGetValue(rule.Id, out var name);
+        _published.TryGetValue(rule.Id, out var published);
+        name = string.IsNullOrWhiteSpace(name) ? rule.Name : name.Trim();
+        published ??= rule.PublishedPlayers;
+        try
+        {
+            await Club.SaveRuleSetAsync(rule.Id, new SaveRuleSetRequest
+            {
+                Name = name,
+                PublishedPlayers = published,
+                SortOrder = rule.SortOrder
+            });
+            Snackbar.Add("Rule set saved.", Severity.Success);
+            await Reload();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task AddRule()
+    {
+        if (string.IsNullOrWhiteSpace(_newName))
+        {
+            Snackbar.Add("Enter a name.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await Club.SaveRuleSetAsync(null, new SaveRuleSetRequest
+            {
+                Name = _newName.Trim(),
+                PublishedPlayers = string.IsNullOrWhiteSpace(_newPlayers) ? null : _newPlayers.Trim()
+            });
+            _newName = _newPlayers = "";
+            await Reload();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
     }
 }

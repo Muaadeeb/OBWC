@@ -20,6 +20,8 @@ public static class DbInitializer
 
         await SeedRolesAsync(provider);
         await SeedContentAsync(db, cancellationToken);
+        if (environment.IsDevelopment())
+            await SampleData.SeedAsync(provider, cancellationToken);
         await provider.GetRequiredService<SuperAdminPromoter>().PromoteConfiguredAccountAsync();
     }
 

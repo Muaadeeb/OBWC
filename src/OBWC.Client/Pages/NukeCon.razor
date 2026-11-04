@@ -4,31 +4,69 @@
 
 <PageTitle>Nuke-Con · OBWC</PageTitle>
 <h1>Nuke-Con</h1>
-<div style="white-space:pre-wrap">@_page?.Body</div>
+<p class="lede">Bill Kuhfahl is the club’s Nuke-Con liaison and maintains this page.</p>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (string.IsNullOrWhiteSpace(_page?.Body))
+{
+    <MudAlert Severity="Severity.Info">The Nuke-Con page has not been written yet.</MudAlert>
+}
+else
+{
+    <div style="white-space:pre-wrap">@_page?.Body</div>
+}
+
 <AuthorizeView Roles="Admin,SuperAdmin">
     <Authorized>
-        <MudTextField @bind-Value="_body" Label="Page text" Lines="6" Class="mt-3" />
-        <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+        <MudPaper Class="pa-3 mt-4" Outlined="true">
+            <MudTextField @bind-Value="_body" Label="Page text" Lines="6" Variant="Variant.Outlined" />
+            <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">Save</MudButton>
+        </MudPaper>
     </Authorized>
 </AuthorizeView>
 
 @code {
     private ContentPageDto? _page;
     private string _body = "";
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
     {
-        _page = await Club.GetContentAsync(ContentKeys.NukeCon);
-        _body = _page?.Body ?? "";
+        _loading = true;
+        try
+        {
+            _page = await Club.GetContentAsync(ContentKeys.NukeCon);
+            _body = _page?.Body ?? "";
+        }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
     }
 
     private async Task Save()
     {
+        if (string.IsNullOrWhiteSpace(_body))
+        {
+            Snackbar.Add("Enter the page text.", Severity.Warning);
+            return;
+        }
+        _busy = true;
         try
         {
-            _page = await Club.UpdateContentAsync(ContentKeys.NukeCon, new SaveContentRequest { Title = "Nuke-Con", Body = _body });
+            _page = await Club.UpdateContentAsync(ContentKeys.NukeCon, new SaveContentRequest { Title = "Nuke-Con", Body = _body.Trim() });
             Snackbar.Add("Saved.", Severity.Success);
         }
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
     }
 }

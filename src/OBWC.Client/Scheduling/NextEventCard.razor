@@ -19,14 +19,7 @@ else
             <dt>Location</dt>
             <dd>@_event.LocationDisplay</dd>
             <dt>Date/Time</dt>
-            <dd>
-                @_event.ScheduledAt.ToLocalTime().ToString("dddd, MMMM d, yyyy")
-                · @_event.ScheduledAt.ToLocalTime().ToString("t")
-                @if (_event.EndsAt is DateTimeOffset end)
-                {
-                    <text>– @end.ToLocalTime().ToString("t")</text>
-                }
-            </dd>
+            <dd>@ClubTime.FormatLongDate(_event.ScheduledAt) · @ClubTime.FormatTimeRange(_event.ScheduledAt, _event.EndsAt)</dd>
             <dt>Points of contact</dt>
             <dd>@_event.OwnerDisplayName@( _event.OwnerIsGm ? " (GM)" : "")</dd>
             <dt>Games</dt>

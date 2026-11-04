@@ -2,6 +2,9 @@
 @inject NavigationManager Navigation
 @inject AuthApi AuthApi
 @inject IJSRuntime Js
+@inject IConfiguration Configuration
+
+<a class="skip-link" href="#main">Skip to content</a>
 
 <MudThemeProvider Theme="ObwcThemes.Theme" IsDarkMode="_dark" />
 <MudPopoverProvider />
@@ -9,23 +12,30 @@
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="0" Fixed="true">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@(() => _open = !_open)" />
-        <div class="club-mark" aria-hidden="true">OBWC</div>
-        <MudText Typo="Typo.h6" Class="ml-2">Omaha Beach Wargaming Club</MudText>
+    <MudAppBar Elevation="0" Fixed="true" Class="club-appbar">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" aria-label="Open the menu" OnClick="@(() => _open = !_open)" />
+        <div class="club-mark appbar-mark" aria-hidden="true">OBWC</div>
+        <MudText Typo="Typo.h6" Class="ml-2 appbar-title">
+            <span class="appbar-title-full">Omaha Beach Wargaming Club</span>
+            <span class="appbar-title-short">OBWC</span>
+        </MudText>
         <MudSpacer />
-        <MudIconButton Icon="@(_dark ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="ToggleTheme" aria-label="Toggle color mode" />
-        <AuthorizeView>
-            <Authorized>
-                <MudButton Href="/account/profile" Color="Color.Inherit">@context.User.Identity?.Name</MudButton>
-                <MudButton Color="Color.Inherit" OnClick="Logout">Sign out</MudButton>
-            </Authorized>
-            <NotAuthorized>
-                <MudButton Href="/account/login" Variant="Variant.Outlined" Color="Color.Inherit">Member sign in</MudButton>
-            </NotAuthorized>
-        </AuthorizeView>
+        <div class="appbar-actions">
+            <MudIconButton Icon="@(_dark ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="ToggleTheme" aria-label="@(_dark ? "Switch to light mode" : "Switch to dark mode")" />
+            <div class="appbar-account">
+                <AuthorizeView>
+                    <Authorized>
+                        <MudButton Href="/account/profile" Color="Color.Inherit" aria-label="Your profile">@context.User.Identity?.Name</MudButton>
+                        <MudButton Color="Color.Inherit" OnClick="Logout">Sign out</MudButton>
+                    </Authorized>
+                    <NotAuthorized>
+                        <MudButton Href="/account/login" Variant="Variant.Outlined" Color="Color.Inherit">Member sign in</MudButton>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
+        </div>
     </MudAppBar>
-    <MudDrawer @bind-Open="_open" ClipMode="DrawerClipMode.Always" Elevation="0" Variant="DrawerVariant.Responsive">
+    <MudDrawer @bind-Open="_open" ClipMode="DrawerClipMode.Always" Elevation="0" Variant="DrawerVariant.Responsive" aria-label="Site">
         <MudNavMenu>
             <MudText Typo="Typo.overline" Class="px-4 pt-3">Public</MudText>
             <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
@@ -54,23 +64,52 @@
                     <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.ManageAccounts">Users &amp; roles</MudNavLink>
                 </Authorized>
             </AuthorizeView>
+            @if (_devMail)
+            {
+                <MudText Typo="Typo.overline" Class="px-4 pt-3">Development</MudText>
+                <MudNavLink Href="/dev/mail" Icon="@Icons.Material.Filled.MarkEmailUnread">Dev mail</MudNavLink>
+            }
+            <div class="drawer-account">
+                <MudDivider Class="my-2" />
+                <AuthorizeView>
+                    <Authorized>
+                        <MudNavLink Href="/account/profile" Icon="@Icons.Material.Filled.Person">@context.User.Identity?.Name</MudNavLink>
+                        <MudNavLink Href="/" Icon="@Icons.Material.Filled.Logout" OnClick="Logout">Sign out</MudNavLink>
+                    </Authorized>
+                    <NotAuthorized>
+                        <MudNavLink Href="/account/login" Icon="@Icons.Material.Filled.Login">Member sign in</MudNavLink>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
         </MudNavMenu>
     </MudDrawer>
     <MudMainContent>
         <div class="terrain-stripe"></div>
-        <MudContainer MaxWidth="MaxWidth.Large" Class="page-wrap">
+        <MudContainer MaxWidth="MaxWidth.Large" Class="page-wrap" id="main">
             @Body
         </MudContainer>
         <footer class="club-footer">
-            <span>Omaha Beach Wargaming Club</span>
-            <MudLink Href="/contact">Contact</MudLink>
+            <div>
+                <strong>Omaha Beach Wargaming Club</strong>
+                <div>Historical and miniature gaming.</div>
+            </div>
+            <nav aria-label="Footer">
+                <MudLink Href="/about">About</MudLink>
+                <MudLink Href="/schedule">Schedule</MudLink>
+                <MudLink Href="/rules">Games &amp; rules</MudLink>
+                <MudLink Href="/contact">Contact</MudLink>
+            </nav>
         </footer>
     </MudMainContent>
 </MudLayout>
 
 @code {
-    private bool _open = true;
+    private bool _open;
     private bool _dark;
+    private bool _devMail;
+
+    protected override void OnInitialized() =>
+        _devMail = Configuration.GetValue("DevTools:Enabled", false);
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -85,6 +124,7 @@
     {
         _dark = !_dark;
         await Js.InvokeVoidAsync("obwcStorage.set", "obwc.theme", _dark ? "dark" : "light");
+        await Js.InvokeVoidAsync("obwcTheme.set", _dark);
     }
 
     private async Task Logout()

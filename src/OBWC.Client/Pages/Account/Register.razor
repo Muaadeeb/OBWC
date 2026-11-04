@@ -26,6 +26,6 @@
     {
         var error = await Auth.RegisterAsync(new RegisterRequest { DisplayName = _name, Email = _email, Password = _password, MembershipType = _type });
         _error = error is not null;
-        _message = error ?? "Account created. Check your email to confirm it. In local development the confirmation link is written to the API log when SMTP is not configured.";
+        _message = error ?? "Account created. Check your email to confirm it. In local development, open Dev mail in the menu (or the API log) for the confirmation link.";
     }
 }

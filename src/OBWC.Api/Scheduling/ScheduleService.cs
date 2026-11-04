@@ -76,7 +76,8 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         CancellationToken cancellationToken = default)
     {
         var weeks = Math.Clamp(request.Weeks <= 0 ? 1 : request.Weeks, 1, 26);
-        var seriesKey = Guid.NewGuid();
+        // A single night is not a series. SeriesKey is set only when more than one week is created.
+        Guid? seriesKey = weeks > 1 ? Guid.NewGuid() : null;
         var created = 0;
         Guid? firstId = null;
         string? lastError = null;
@@ -100,9 +101,13 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
                 continue;
             }
 
-            var tracked = await db.PlaySessions.FirstAsync(item => item.Id == session.Id, cancellationToken);
-            tracked.SeriesKey = seriesKey;
-            await db.SaveChangesAsync(cancellationToken);
+            if (seriesKey is Guid key)
+            {
+                var tracked = await db.PlaySessions.FirstAsync(item => item.Id == session.Id, cancellationToken);
+                tracked.SeriesKey = key;
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
             created++;
             firstId ??= session.Id;
         }
@@ -406,7 +411,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         {
             await NotifyRsvpPlayersAsync(targets.Select(item => item.Id).ToList(),
                 "Rescheduled: club game",
-                $"Event moved to {newStart.ToLocalTime():g}. Following series weeks move by the same amount when that option is selected.",
+                $"Event moved to {ClubTime.FormatDateTime(newStart)}. Following series weeks move by the same amount when that option is selected.",
                 null,
                 cancellationToken);
         }
@@ -608,7 +613,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
 
         await db.SaveChangesAsync(cancellationToken);
         var title = string.IsNullOrWhiteSpace(session.Title) ? "Club game" : session.Title!;
-        var when = DateTime.SpecifyKind(session.ScheduledAt, DateTimeKind.Utc).ToLocalTime().ToString("g");
+        var when = ClubTime.FormatDateTime(AsOffset(session.ScheduledAt));
         var ids = waiting.Select(row => row.UserId).ToList();
         var emails = await db.Users.AsNoTracking().Where(user => ids.Contains(user.Id) && user.Email != null).Select(user => user.Email!).ToListAsync(cancellationToken);
         foreach (var email in emails)
@@ -646,7 +651,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         foreach (var session in sessions.OrderBy(item => item.ScheduledAt))
         {
             var title = string.IsNullOrWhiteSpace(session.Title) ? "Club game" : session.Title!;
-            body.AppendLine($"• {DateTime.SpecifyKind(session.ScheduledAt, DateTimeKind.Utc).ToLocalTime():g} — {title}");
+            body.AppendLine($"• {ClubTime.FormatDateTime(AsOffset(session.ScheduledAt))} — {title}");
         }
 
         body.AppendLine();

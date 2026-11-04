@@ -15,8 +15,7 @@ builder.Services.Configure<AppOptions>(builder.Configuration.GetSection(AppOptio
 builder.Services.Configure<UploadOptions>(builder.Configuration.GetSection(UploadOptions.Section));
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), sql =>
-        sql.EnableRetryOnFailure()));
+    DatabaseConfiguration.Configure(options, builder.Configuration, builder.Environment.ContentRootPath));
 
 builder.Services
     .AddIdentityCore<ApplicationUser>(options =>
@@ -180,10 +179,21 @@ static void ValidateConfiguration(WebApplicationBuilder builder)
             "Jwt:Key must be a random string of at least 32 characters. Set it with dotnet user-secrets or the Jwt__Key environment variable. Do not commit it.");
     }
 
-    var connection = builder.Configuration.GetConnectionString("DefaultConnection");
-    if (string.IsNullOrWhiteSpace(connection) || connection.Contains("YOUR_SQL", StringComparison.OrdinalIgnoreCase))
+    var devKey = key.StartsWith("DEV_ONLY_", StringComparison.Ordinal);
+    if (devKey && !builder.Environment.IsDevelopment())
     {
         throw new InvalidOperationException(
-            "ConnectionStrings:DefaultConnection is still a placeholder. Set it with dotnet user-secrets or ConnectionStrings__DefaultConnection.");
+            "Jwt:Key is the development-only key. Set a unique key with the Jwt__Key environment variable before running outside Development.");
+    }
+
+    var provider = builder.Configuration["Database:Provider"];
+    var connection = builder.Configuration.GetConnectionString("DefaultConnection");
+    var sqlServer = string.Equals(provider, DatabaseConfiguration.SqlServerProvider, StringComparison.OrdinalIgnoreCase);
+    if (string.IsNullOrWhiteSpace(connection)
+        || connection.Contains("YOUR_SQL", StringComparison.OrdinalIgnoreCase)
+        || (sqlServer && connection.Contains("Data Source=", StringComparison.OrdinalIgnoreCase)))
+    {
+        throw new InvalidOperationException(
+            "ConnectionStrings:DefaultConnection is still a placeholder. For SQLite use a file path such as Data Source=App_Data/obwc.db. For SQL Server set Database:Provider to SqlServer and set the connection with user-secrets or ConnectionStrings__DefaultConnection.");
     }
 }

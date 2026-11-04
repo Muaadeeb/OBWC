@@ -8,7 +8,7 @@
 <PageTitle>Game Schedule · OBWC</PageTitle>
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2 flex-wrap">
-    <MudText Typo="Typo.h4" Class="mb-0">Game schedule</MudText>
+    <h1 class="mud-typography mud-typography-h4 mb-0">Game schedule</h1>
     <MudSpacer />
     <AuthorizeView Roles="Member,Admin,SuperAdmin">
         <Authorized>
@@ -17,7 +17,7 @@
         </Authorized>
     </AuthorizeView>
 </MudStack>
-<p class="lede">Public calendar of club games. Members schedule nights, collect RSVPs, and check in when the game is near.</p>
+<p class="lede">Public calendar of club games. Times are Central Time (CT). Members schedule nights, collect RSVPs, and check in when the game is near.</p>
 
 @if (_loading)
 {
@@ -49,8 +49,8 @@ else
                 <MudText Typo="Typo.subtitle1" Class="mb-2">Schedule a game</MudText>
                 <MudGrid>
                     <MudItem xs="12" md="3"><MudDatePicker @bind-Date="_newDate" Label="First date" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12" md="2"><MudTimePicker @bind-Time="_newTime" Label="Start" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12" md="2"><MudTimePicker @bind-Time="_newEnd" Label="End" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" md="2"><MudTimePicker @bind-Time="_newTime" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" md="2"><MudTimePicker @bind-Time="_newEnd" Label="End (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="_weeks" Label="Weeks" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="26" HelperText="1 = single night" /></MudItem>
                     <MudItem xs="12" md="3"><MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" md="4"><MudTextField @bind-Value="_venue" Label="Venue" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
@@ -106,17 +106,11 @@ else
             <MudPaper Class="pa-3 mb-2" Outlined="true" Style="@(ev.IsCancelled ? "opacity:.75" : ev.IsPublished ? null : "border-style:dashed")">
                 <MudStack Row="true" AlignItems="AlignItems.Start" Class="flex-wrap">
                     <MudStack Spacing="0" Style="min-width:10rem">
-                        <MudText Typo="Typo.subtitle1"><strong>@ev.ScheduledAt.ToLocalTime().ToString("ddd d MMM")</strong></MudText>
-                        <MudText Typo="Typo.body2">
-                            @ev.ScheduledAt.ToLocalTime().ToString("t")
-                            @if (ev.EndsAt is DateTimeOffset end)
-                            {
-                                <text> – @end.ToLocalTime().ToString("t")</text>
-                            }
-                        </MudText>
-                        @if (ev.IsCancelled) { <MudChip T="string" Size="Size.Small" Color="Color.Error">Cancelled</MudChip> }
-                        @if (!ev.IsPublished) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Draft</MudChip> }
-                        @if (ev.SeriesKey is not null) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Series</MudChip> }
+                        <MudText Typo="Typo.subtitle1"><strong>@ClubTime.FormatDate(ev.ScheduledAt)</strong></MudText>
+                        <MudText Typo="Typo.body2">@ClubTime.FormatTimeRange(ev.ScheduledAt, ev.EndsAt)</MudText>
+                        @if (ev.IsCancelled) { <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="fit-chip">Cancelled</MudChip> }
+                        @if (!ev.IsPublished) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="fit-chip">Draft</MudChip> }
+                        @if (ev.SeriesKey is not null) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="fit-chip">Series</MudChip> }
                         @if (ev.PlayerCap is int cap) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Cap @cap</MudChip> }
                         @if (isPast) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Past</MudChip> }
                     </MudStack>
@@ -163,7 +157,7 @@ else
                                         <td>@row.DisplayName</td>
                                         <td>@row.Rsvp</td>
                                         <td>@row.NightStatus</td>
-                                        <td>@(row.CheckedInAt?.ToLocalTime().ToString("t") ?? "—")</td>
+                                        <td>@(row.CheckedInAt is DateTimeOffset checkedIn ? ClubTime.FormatTime(checkedIn) : "—")</td>
                                         @if (ev.CanEdit && !ev.IsCancelled)
                                         {
                                             <td>
@@ -233,7 +227,7 @@ else
     private readonly HashSet<Guid> _expanded = [];
     private List<(string Key, string Label)> _months = [];
 
-    private DateTime? _newDate = DateTime.Today.AddDays(7);
+    private DateTime? _newDate = ClubTime.ClubToday().AddDays(7);
     private TimeSpan? _newTime = new TimeSpan(18, 0, 0);
     private TimeSpan? _newEnd = new TimeSpan(22, 0, 0);
     private int _weeks = 1;
@@ -252,7 +246,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        var today = DateTime.Today;
+        var today = ClubTime.ClubToday();
         _months = Enumerable.Range(0, 12).Select(index =>
         {
             var month = today.AddMonths(index);
@@ -328,17 +322,22 @@ else
             _formError = "Add a venue or an address.";
             return;
         }
-        var startLocal = DateTime.SpecifyKind(_newDate.Value.Date + _newTime.Value, DateTimeKind.Local);
-        DateTimeOffset? end = _newEnd is TimeSpan endTime
-            ? new DateTimeOffset(DateTime.SpecifyKind(_newDate.Value.Date + endTime, DateTimeKind.Local))
-            : null;
+        var start = ClubTime.FromClubWallClock(_newDate.Value, _newTime.Value);
+        DateTimeOffset? end = null;
+        if (_newEnd is TimeSpan endTime)
+        {
+            var endDate = _newDate.Value.Date;
+            if (endTime < _newTime.Value)
+                endDate = endDate.AddDays(1);
+            end = ClubTime.FromClubWallClock(endDate, endTime);
+        }
         _busy = true;
         try
         {
             await Schedule.CreateAsync(new CreateSessionRequest
             {
                 Title = _title.Trim(),
-                ScheduledAt = new DateTimeOffset(startLocal),
+                ScheduledAt = start,
                 EndsAt = end,
                 Venue = Blank(_venue),
                 Address = Blank(_address),

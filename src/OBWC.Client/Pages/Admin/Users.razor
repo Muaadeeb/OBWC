@@ -6,8 +6,23 @@
 
 <PageTitle>Users · OBWC</PageTitle>
 <h1>Users and roles</h1>
-<p class="lede">SuperAdmin is assigned only from the server setting Authorization:SuperAdminEmail. It cannot be granted here. GM is an add-on for a Member, Admin, or SuperAdmin.</p>
-<MudTable Items="_rows" Hover="true" Dense="true">
+<p class="lede">SuperAdmin is assigned only from the server setting Authorization:SuperAdminEmail. It cannot be granted here. GM is an add-on for a Member, Admin, or SuperAdmin. Admins do maintenance. A GM edits only events they created. A member edits only what they own.</p>
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_rows.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No accounts yet.</MudAlert>
+}
+else
+{
+<div style="overflow-x:auto">
+<MudTable Items="_rows" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
     <HeaderContent>
         <MudTh>Name</MudTh>
         <MudTh>Email</MudTh>
@@ -34,12 +49,18 @@
         </MudTd>
     </RowTemplate>
 </MudTable>
+</div>
+}
 
 @code {
     private List<Row> _rows = [];
+    private bool _loading = true;
+    private string? _error;
 
     protected override async Task OnInitializedAsync()
     {
+        try
+        {
         var me = await Auth.MeAsync();
         var viewerIsSuperAdmin = me?.Roles.Contains(RoleNames.SuperAdmin) == true;
         _rows = (await Club.GetUsersAsync()).Select(user => new Row
@@ -51,6 +72,9 @@
             SuperAdmin = user.Roles.Contains(RoleNames.SuperAdmin),
             Locked = user.Roles.Contains(RoleNames.SuperAdmin) && !viewerIsSuperAdmin
         }).ToList();
+        }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
     }
 
     private async Task Save(Row row)

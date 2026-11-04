@@ -5,11 +5,11 @@
 
 <PageTitle>My schedule · OBWC</PageTitle>
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2 flex-wrap">
-    <MudText Typo="Typo.h4" Class="mb-0">My schedule</MudText>
+    <h1 class="mud-typography mud-typography-h4 mb-0">My schedule</h1>
     <MudSpacer />
     <MudButton Variant="Variant.Text" Href="/schedule" StartIcon="@Icons.Material.Filled.CalendarMonth">Full calendar</MudButton>
 </MudStack>
-<p class="lede">Your Going, Waitlist, and Maybe nights, with a check-in button when the game is near.</p>
+<p class="lede">Your Going, Waitlist, and Maybe nights. Times are Central Time (CT).</p>
 
 @if (_loading)
 {
@@ -32,23 +32,23 @@ else
             && DateTimeOffset.UtcNow >= ev.ScheduledAt.AddHours(-3)
             && DateTimeOffset.UtcNow <= (ev.EndsAt ?? ev.ScheduledAt.AddHours(4)).AddHours(6);
         <MudPaper Class="pa-3 mb-2" Outlined="true">
-            <MudStack Row="true" Class="flex-wrap" AlignItems="AlignItems.Center">
+            <MudStack Row="true" Class="flex-wrap" AlignItems="AlignItems.Start">
                 <MudStack Spacing="0" Style="min-width:9rem">
-                    <MudText Typo="Typo.subtitle1"><strong>@ev.ScheduledAt.ToLocalTime().ToString("ddd d MMM")</strong></MudText>
-                    <MudText Typo="Typo.caption">@ev.ScheduledAt.ToLocalTime().ToString("t")</MudText>
+                    <MudText Typo="Typo.subtitle1"><strong>@ClubTime.FormatDate(ev.ScheduledAt)</strong></MudText>
+                    <MudText Typo="Typo.caption">@ClubTime.FormatTimeRange(ev.ScheduledAt, ev.EndsAt)</MudText>
                 </MudStack>
-                <MudStack Spacing="1" Style="flex:1">
+                <MudStack Spacing="1" Style="flex:1" AlignItems="AlignItems.Start">
                     <MudText Typo="Typo.subtitle1">@(string.IsNullOrWhiteSpace(ev.Title) ? "Club game" : ev.Title)</MudText>
-                    @if (ev.IsCancelled) { <MudChip T="string" Size="Size.Small" Color="Color.Error">Cancelled</MudChip> }
+                    @if (ev.IsCancelled) { <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="fit-chip">Cancelled</MudChip> }
                     @if (!string.IsNullOrWhiteSpace(ev.Venue) || !string.IsNullOrWhiteSpace(ev.Address))
                     {
                         <MudText Typo="Typo.caption">@ev.Venue @(!string.IsNullOrWhiteSpace(ev.Address) ? "· " + ev.Address : "")</MudText>
                     }
-                    <MudChip T="string" Size="Size.Small" Color="@(ev.MyRsvp switch { SessionRsvpStatus.Going => Color.Success, SessionRsvpStatus.Waitlist => Color.Info, SessionRsvpStatus.Maybe => Color.Warning, _ => Color.Default })">
+                    <MudChip T="string" Size="Size.Small" Class="fit-chip" Color="@(ev.MyRsvp switch { SessionRsvpStatus.Going => Color.Success, SessionRsvpStatus.Waitlist => Color.Info, SessionRsvpStatus.Maybe => Color.Warning, _ => Color.Default })">
                         @ev.MyRsvp
                     </MudChip>
-                    @if (ev.IAmCheckedIn) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success">Checked in</MudChip> }
-                    @if (isPast) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Past</MudChip> }
+                    @if (ev.IAmCheckedIn) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" Class="fit-chip">Checked in</MudChip> }
+                    @if (isPast) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="fit-chip">Past</MudChip> }
                     @if (!ev.IsCancelled && ev.AllowPlayerRsvp && ev.IsPublished && !isPast)
                     {
                         <MudButtonGroup OverrideStyles="false" Class="mt-1">

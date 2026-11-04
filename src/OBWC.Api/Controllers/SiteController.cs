@@ -1,7 +1,7 @@
 namespace OBWC.Api.Controllers;
 
 [ApiController]
-public class SiteController(ApplicationDbContext db, IClubMailer mail) : ClubApiController
+public class SiteController(ApplicationDbContext db, IClubMailer mail, IHostEnvironment environment) : ClubApiController
 {
     [HttpGet("api/settings/public")]
     [AllowAnonymous]
@@ -114,7 +114,7 @@ public class SiteController(ApplicationDbContext db, IClubMailer mail) : ClubApi
 
         var settings = await SettingsAsync(cancellationToken);
         var contactEmail = settings.GetValueOrDefault(SettingKeys.ContactEmail) ?? ClubContentContact.Email;
-        if (!mail.IsConfigured)
+        if (!mail.IsConfigured && !environment.IsDevelopment())
         {
             return Problem(
                 detail: $"The site cannot send mail yet. Write to {contactEmail} directly.",
@@ -123,8 +123,22 @@ public class SiteController(ApplicationDbContext db, IClubMailer mail) : ClubApi
         }
 
         var body = $"From: {request.Name.Trim()} <{request.Email.Trim()}>\n\n{request.Message.Trim()}";
-        await mail.SendAsync(contactEmail, "OBWC website contact", body, request.Name.Trim(), request.Email.Trim(), cancellationToken);
-        return Accepted(new MessageResponse { Message = "Thanks. Your note was sent to the club." });
+        try
+        {
+            await mail.SendAsync(contactEmail, "OBWC website contact", body, request.Name.Trim(), request.Email.Trim(), cancellationToken);
+        }
+        catch (MailNotConfiguredException)
+        {
+            return Problem(
+                detail: $"The site cannot send mail yet. Write to {contactEmail} directly.",
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Email is not configured");
+        }
+
+        var message = mail.IsConfigured
+            ? "Thanks. Your note was sent to the club."
+            : $"Thanks. Mail is not configured on this server, so the note was saved for the developer. You can also write {contactEmail} directly.";
+        return Accepted(new MessageResponse { Message = message });
     }
 
     [HttpGet("health")]

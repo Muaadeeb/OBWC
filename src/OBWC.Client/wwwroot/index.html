@@ -4,7 +4,14 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Omaha Beach Wargaming Club — historical and miniature gaming. Schedules, rule sets, and club information." />
     <title>Omaha Beach Wargaming Club</title>
+    <script>
+        try {
+            if (localStorage.getItem("obwc.theme") === "dark")
+                document.documentElement.classList.add("obwc-dark");
+        } catch (e) { }
+    </script>
     <base href="/" />
     <link rel="preload" id="webassembly" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />

@@ -6,7 +6,13 @@ The host needs the ASP.NET Core 10 hosting bundle for a framework-dependent API.
 
 ## 1. Database
 
-Create a SQL Server database in the SmarterASP panel. Copy the host, database name, user, and password into the API connection string. Do not commit that string.
+Create a SQL Server database in the SmarterASP panel. The live site should use SQL Server, not the SQLite file used for local development.
+
+Set `Database__Provider` to `SqlServer`. Copy the host, database name, user, and password into `ConnectionStrings__DefaultConnection`. Do not commit that string.
+
+The migrations compiled into the API are the SQLite set. Before publishing for SQL Server, compile the archived SQL Server migrations instead. In `src/OBWC.Api/OBWC.Api.csproj`, remove the `Compile Remove` for `Data/SqlServerMigrations/**` and exclude `Data/Migrations/**`. Details are in `src/OBWC.Api/Data/SqlServerMigrations/README.md`. Those archived migrations include the Identity schema version 3 fix. Then publish. With `App__ApplyMigrations=true`, startup applies that SQL Server set.
+
+Leaving the provider on `Sqlite` would create `App_Data/obwc.db` on the server. That is only a fallback. Use SQL Server on SmarterASP.NET.
 
 ## 2. Two sites
 
@@ -19,6 +25,7 @@ Set these on the API site (environment variables or the published `web.config` `
 | Name | Value |
 | --- | --- |
 | `ASPNETCORE_ENVIRONMENT` | `Production` |
+| `Database__Provider` | `SqlServer` |
 | `ConnectionStrings__DefaultConnection` | SQL connection string from the panel |
 | `Jwt__Key` | Random string, at least 32 characters |
 | `Jwt__Issuer` | `OBWC` |

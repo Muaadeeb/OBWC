@@ -8,6 +8,10 @@
         <p class="eyebrow">Omaha · tabletop</p>
         <h1>Omaha Beach Wargaming Club</h1>
         <p class="lede">@(_lead ?? "Historical and miniature gaming, with a calendar the whole club can read.")</p>
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true">@_error</MudAlert>
+        }
     </div>
 </section>
 <div class="photo-slot">A photo from a club game day goes here.</div>
@@ -22,6 +26,7 @@
 
 @code {
     private string? _lead;
+    private string? _error;
 
     protected override async Task OnInitializedAsync()
     {
@@ -32,6 +37,7 @@
         }
         catch (ClubApiException)
         {
+            _error = "The club introduction could not be loaded. The rest of the site may still be available.";
         }
     }
 }

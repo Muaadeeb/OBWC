@@ -5,21 +5,17 @@
     <DialogContent>
         <MudText Typo="Typo.subtitle2" Class="mb-1">@EventTitle</MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3 d-block">
-            Current: @CurrentStart.ToLocalTime().ToString("g")
-            @if (CurrentEnd is DateTimeOffset end)
-            {
-                <text> – @end.ToLocalTime().ToString("t")</text>
-            }
+            Current: @ClubTime.FormatLongDate(CurrentStart) · @ClubTime.FormatTimeRange(CurrentStart, CurrentEnd)
         </MudText>
         <MudGrid>
             <MudItem xs="12" sm="6">
                 <MudDatePicker @bind-Date="_date" Label="New date" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" />
             </MudItem>
             <MudItem xs="12" sm="3">
-                <MudTimePicker @bind-Time="_startTime" Label="Start" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" />
+                <MudTimePicker @bind-Time="_startTime" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" />
             </MudItem>
             <MudItem xs="12" sm="3">
-                <MudTimePicker @bind-Time="_endTime" Label="End" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" Clearable="true" />
+                <MudTimePicker @bind-Time="_endTime" Label="End (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" Clearable="true" />
             </MudItem>
         </MudGrid>
         @if (HasSeries)
@@ -55,10 +51,10 @@
 
     protected override void OnParametersSet()
     {
-        var local = CurrentStart.ToLocalTime();
-        _date = local.Date;
-        _startTime = local.TimeOfDay;
-        _endTime = CurrentEnd?.ToLocalTime().TimeOfDay;
+        var club = ClubTime.ToClub(CurrentStart);
+        _date = club.DateTime.Date;
+        _startTime = club.TimeOfDay;
+        _endTime = CurrentEnd is DateTimeOffset end ? ClubTime.ToClub(end).TimeOfDay : null;
     }
 
     private void SetPlusOneWeek() => Shift(7);
@@ -66,11 +62,11 @@
 
     private void Shift(int days)
     {
-        var local = CurrentStart.ToLocalTime().AddDays(days);
-        _date = local.Date;
-        _startTime = local.TimeOfDay;
+        var club = ClubTime.ToClub(CurrentStart).AddDays(days);
+        _date = club.DateTime.Date;
+        _startTime = club.TimeOfDay;
         if (CurrentEnd is DateTimeOffset end)
-            _endTime = end.ToLocalTime().AddDays(days).TimeOfDay;
+            _endTime = ClubTime.ToClub(end).AddDays(days).TimeOfDay;
     }
 
     private void Cancel() => MudDialog.Cancel();
@@ -79,15 +75,14 @@
     {
         if (_date is null || _startTime is null)
             return;
-        var startLocal = DateTime.SpecifyKind(_date.Value.Date + _startTime.Value, DateTimeKind.Local);
-        var newStart = new DateTimeOffset(startLocal);
+        var newStart = ClubTime.FromClubWallClock(_date.Value, _startTime.Value);
         DateTimeOffset? newEnd = null;
         if (_endTime is TimeSpan endTime)
         {
-            var endLocal = DateTime.SpecifyKind(_date.Value.Date + endTime, DateTimeKind.Local);
+            var endDate = _date.Value.Date;
             if (endTime < _startTime.Value)
-                endLocal = endLocal.AddDays(1);
-            newEnd = new DateTimeOffset(endLocal);
+                endDate = endDate.AddDays(1);
+            newEnd = ClubTime.FromClubWallClock(endDate, endTime);
         }
 
         MudDialog.Close(DialogResult.Ok(new Result(newStart, newEnd, _entireSeries, _notify)));
