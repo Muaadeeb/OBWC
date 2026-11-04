@@ -1,0 +1,31 @@
+@page "/account/register"
+@inject AuthApi Auth
+
+<PageTitle>Create an account · OBWC</PageTitle>
+<MudPaper Class="pa-4" Outlined="true" Style="max-width:32rem">
+    <h1>Create an account</h1>
+    <p>Password: 8+ characters with upper and lower case, a number, and a symbol. Confirm the email before you sign in.</p>
+    <MudTextField @bind-Value="_name" Label="Name to show other members" />
+    <MudTextField @bind-Value="_email" Label="Email" />
+    <MudTextField @bind-Value="_password" Label="Password" InputType="InputType.Password" />
+    <MudSelect T="MembershipType?" @bind-Value="_type" Label="Membership" Clearable="true">
+        <MudSelectItem T="MembershipType?" Value="@MembershipType.Adult">Adult — $25</MudSelectItem>
+        <MudSelectItem T="MembershipType?" Value="@MembershipType.Student">Student, 22 and under — $10</MudSelectItem>
+        <MudSelectItem T="MembershipType?" Value="@MembershipType.FriendOfObwc">Friend of OBWC — free</MudSelectItem>
+    </MudSelect>
+    @if (!string.IsNullOrEmpty(_message)) { <MudAlert Severity="@(_error ? Severity.Error : Severity.Success)" Class="mt-2">@_message</MudAlert> }
+    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit">Register</MudButton>
+</MudPaper>
+
+@code {
+    private string _name = "", _email = "", _password = "", _message = "";
+    private bool _error;
+    private MembershipType? _type;
+
+    private async Task Submit()
+    {
+        var error = await Auth.RegisterAsync(new RegisterRequest { DisplayName = _name, Email = _email, Password = _password, MembershipType = _type });
+        _error = error is not null;
+        _message = error ?? "Account created. Check your email to confirm it. In local development the confirmation link is written to the API log when SMTP is not configured.";
+    }
+}

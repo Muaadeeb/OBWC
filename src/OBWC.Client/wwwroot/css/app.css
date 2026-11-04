@@ -1,0 +1,196 @@
+html, body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+h1, h2, h3, .mud-typography-h4, .mud-typography-h5, .mud-typography-h6 {
+    font-family: Georgia, "Palatino Linotype", Palatino, serif;
+}
+
+.page-wrap {
+    padding-top: 1.5rem;
+    padding-bottom: 3rem;
+}
+
+.lede {
+    max-width: 46rem;
+    margin-bottom: 1.25rem;
+}
+
+.terrain-stripe {
+    height: 8px;
+    background:
+        linear-gradient(90deg, #7A8F4A 0 28%, #C9B873 28% 46%, #8B6B45 46% 70%, #2F6DB5 70% 100%);
+}
+
+.club-mark {
+    width: 2.4rem;
+    height: 2.4rem;
+    border: 2px solid #C9B873;
+    background: #3E4A28;
+    color: #F7F4EC;
+    display: grid;
+    place-items: center;
+    font-family: Georgia, serif;
+    font-size: .72rem;
+    letter-spacing: .04em;
+}
+
+.club-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.5rem 1.5rem;
+    border-top: 1px solid #E4D7BC;
+    color: #5C5144;
+}
+
+.hero {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1.25rem;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.hero .club-mark {
+    width: 5rem;
+    height: 5rem;
+    font-size: 1rem;
+}
+
+.photo-slot {
+    min-height: 9rem;
+    border: 1px dashed #8B6B45;
+    background:
+        repeating-linear-gradient(135deg, rgba(122, 143, 74, .12) 0 12px, rgba(201, 184, 115, .18) 12px 24px);
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 1rem;
+    color: #5C5144;
+    margin: 1rem 0;
+}
+
+.photo-slot img {
+    width: 100%;
+    max-height: 18rem;
+    object-fit: cover;
+}
+
+.broadsheet {
+    background: #fffdf8;
+    border: 8px solid #8B6B45;
+    outline: 1px solid #C9B873;
+    padding: 1.25rem 1.5rem 1.5rem;
+    max-width: 40rem;
+}
+
+.broadsheet header {
+    background: #7A8F4A;
+    color: #F7F4EC;
+    margin: -1.25rem -1.5rem 1rem;
+    padding: .8rem 1.5rem;
+}
+
+.broadsheet h2 {
+    margin: 0;
+    font-size: 1.8rem;
+}
+
+.broadsheet dl {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    gap: .4rem .75rem;
+    margin: 0;
+}
+
+.broadsheet dt {
+    font-weight: 700;
+    color: #3E4A28;
+}
+
+.eyebrow {
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    font-size: .75rem;
+    margin: 0 0 .2rem;
+}
+
+.link-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: .75rem;
+    margin-top: 1rem;
+}
+
+.link-grid a {
+    display: block;
+    padding: .9rem 1rem;
+    border: 1px solid #E4D7BC;
+    background: #fffdf8;
+    text-decoration: none;
+    color: inherit;
+}
+
+.link-grid a strong {
+    display: block;
+    font-family: Georgia, serif;
+}
+
+#blazor-error-ui {
+    background: #fff3cd;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, .2);
+    display: none;
+    left: 0;
+    padding: .6rem 1.25rem .7rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: .75rem;
+    top: .5rem;
+}
+
+.loading-progress {
+    position: absolute;
+    display: block;
+    width: 8rem;
+    height: 8rem;
+    inset: 20vh 0 auto;
+    margin: 0 auto;
+}
+
+.loading-progress circle {
+    fill: none;
+    stroke: #E4D7BC;
+    stroke-width: .6rem;
+    transform-origin: 50% 50%;
+    transform: rotate(-90deg);
+}
+
+.loading-progress circle:last-child {
+    stroke: #7A8F4A;
+    stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * .8), 500%;
+    transition: stroke-dasharray .05s ease-in-out;
+}
+
+.loading-progress-text {
+    position: absolute;
+    text-align: center;
+    font-weight: 700;
+    inset: calc(20vh + 3.25rem) 0 auto .2rem;
+}
+
+.loading-progress-text:after {
+    content: var(--blazor-load-percentage-text, "Loading");
+}
+
+@media (max-width: 700px) {
+    .hero { grid-template-columns: 1fr; }
+    .broadsheet dl { grid-template-columns: 1fr; }
+}

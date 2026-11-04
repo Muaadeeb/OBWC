@@ -1,0 +1,84 @@
+@page "/admin/users"
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ClubApi Club
+@inject AuthApi Auth
+@inject ISnackbar Snackbar
+
+<PageTitle>Users · OBWC</PageTitle>
+<h1>Users and roles</h1>
+<p class="lede">SuperAdmin is assigned only from the server setting Authorization:SuperAdminEmail. It cannot be granted here. GM is an add-on for a Member, Admin, or SuperAdmin.</p>
+<MudTable Items="_rows" Hover="true" Dense="true">
+    <HeaderContent>
+        <MudTh>Name</MudTh>
+        <MudTh>Email</MudTh>
+        <MudTh>Member</MudTh>
+        <MudTh>Admin</MudTh>
+        <MudTh>GM</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.User.DisplayName</MudTd>
+        <MudTd>@context.User.Email</MudTd>
+        <MudTd><MudCheckBox T="bool" @bind-Value="context.Member" Disabled="@context.Locked" /></MudTd>
+        <MudTd><MudCheckBox T="bool" @bind-Value="context.Admin" Disabled="@context.Locked" /></MudTd>
+        <MudTd><MudCheckBox T="bool" @bind-Value="context.Gm" Disabled="@context.Locked" /></MudTd>
+        <MudTd>
+            @if (context.SuperAdmin)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary">SuperAdmin</MudChip>
+            }
+            @if (!context.Locked)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="() => Save(context)">Save</MudButton>
+            }
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private List<Row> _rows = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var me = await Auth.MeAsync();
+        var viewerIsSuperAdmin = me?.Roles.Contains(RoleNames.SuperAdmin) == true;
+        _rows = (await Club.GetUsersAsync()).Select(user => new Row
+        {
+            User = user,
+            Member = user.Roles.Contains(RoleNames.Member),
+            Admin = user.Roles.Contains(RoleNames.Admin),
+            Gm = user.Roles.Contains(RoleNames.Gm),
+            SuperAdmin = user.Roles.Contains(RoleNames.SuperAdmin),
+            Locked = user.Roles.Contains(RoleNames.SuperAdmin) && !viewerIsSuperAdmin
+        }).ToList();
+    }
+
+    private async Task Save(Row row)
+    {
+        try
+        {
+            row.User = await Club.UpdateRolesAsync(row.User.Id, new UpdateRolesRequest
+            {
+                Member = row.Member,
+                Admin = row.Admin,
+                Gm = row.Gm,
+                SuperAdmin = false
+            });
+            Snackbar.Add("Roles saved.", Severity.Success);
+        }
+        catch (ClubApiException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private sealed class Row
+    {
+        public UserSummaryDto User { get; set; } = new();
+        public bool Member { get; set; }
+        public bool Admin { get; set; }
+        public bool Gm { get; set; }
+        public bool SuperAdmin { get; set; }
+        public bool Locked { get; set; }
+    }
+}

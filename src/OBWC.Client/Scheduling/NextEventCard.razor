@@ -1,0 +1,59 @@
+@inject ScheduleApi Schedule
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else if (_event is null)
+{
+    <MudAlert Severity="Severity.Info">No upcoming game is on the schedule.</MudAlert>
+}
+else
+{
+    <article class="broadsheet">
+        <header>
+            <p class="eyebrow">Next event</p>
+            <h2>@(string.IsNullOrWhiteSpace(_event.Title) ? "Club game" : _event.Title)</h2>
+        </header>
+        <dl>
+            <dt>Location</dt>
+            <dd>@_event.LocationDisplay</dd>
+            <dt>Date/Time</dt>
+            <dd>
+                @_event.ScheduledAt.ToLocalTime().ToString("dddd, MMMM d, yyyy")
+                · @_event.ScheduledAt.ToLocalTime().ToString("t")
+                @if (_event.EndsAt is DateTimeOffset end)
+                {
+                    <text>– @end.ToLocalTime().ToString("t")</text>
+                }
+            </dd>
+            <dt>Points of contact</dt>
+            <dd>@_event.OwnerDisplayName@( _event.OwnerIsGm ? " (GM)" : "")</dd>
+            <dt>Games</dt>
+            <dd>
+                @(_event.RuleSetName ?? "See the notes")
+                @if (!string.IsNullOrWhiteSpace(_event.Notes))
+                {
+                    <span> — @_event.Notes</span>
+                }
+            </dd>
+        </dl>
+        @if (_event.IsCancelled)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true">Cancelled@(_event.CancellationReason is null ? "" : ": " + _event.CancellationReason)</MudAlert>
+        }
+        <MudButton Variant="Variant.Text" Href="/schedule" Class="mt-2">Open the schedule</MudButton>
+    </article>
+}
+
+@code {
+    private bool _loading = true;
+    private CalendarEventDto? _event;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _event = await Schedule.GetNextAsync(); }
+        catch (ClubApiException) { _event = null; }
+        finally { _loading = false; }
+    }
+}

@@ -1,0 +1,97 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Reschedule event</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle2" Class="mb-1">@EventTitle</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3 d-block">
+            Current: @CurrentStart.ToLocalTime().ToString("g")
+            @if (CurrentEnd is DateTimeOffset end)
+            {
+                <text> – @end.ToLocalTime().ToString("t")</text>
+            }
+        </MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_date" Label="New date" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudTimePicker @bind-Time="_startTime" Label="Start" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudTimePicker @bind-Time="_endTime" Label="End" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" Clearable="true" />
+            </MudItem>
+        </MudGrid>
+        @if (HasSeries)
+        {
+            <MudCheckBox T="bool" @bind-Value="_entireSeries" Color="Color.Warning" Class="mt-3"
+                         Label="Also shift following series weeks by the same amount" />
+        }
+        <MudCheckBox T="bool" @bind-Value="_notify" Color="Color.Info" Class="mt-1"
+                     Label="Email Going / Maybe / Waitlist" />
+        <MudStack Row="true" Class="mt-2 flex-wrap" Spacing="1">
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="SetPlusOneWeek">+1 week</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="SetPlusOneDay">+1 day</MudButton>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Warning" Variant="Variant.Filled" OnClick="Submit">Reschedule</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string EventTitle { get; set; } = "Club game";
+    [Parameter] public DateTimeOffset CurrentStart { get; set; }
+    [Parameter] public DateTimeOffset? CurrentEnd { get; set; }
+    [Parameter] public bool HasSeries { get; set; }
+
+    private DateTime? _date;
+    private TimeSpan? _startTime;
+    private TimeSpan? _endTime;
+    private bool _entireSeries;
+    private bool _notify = true;
+
+    protected override void OnParametersSet()
+    {
+        var local = CurrentStart.ToLocalTime();
+        _date = local.Date;
+        _startTime = local.TimeOfDay;
+        _endTime = CurrentEnd?.ToLocalTime().TimeOfDay;
+    }
+
+    private void SetPlusOneWeek() => Shift(7);
+    private void SetPlusOneDay() => Shift(1);
+
+    private void Shift(int days)
+    {
+        var local = CurrentStart.ToLocalTime().AddDays(days);
+        _date = local.Date;
+        _startTime = local.TimeOfDay;
+        if (CurrentEnd is DateTimeOffset end)
+            _endTime = end.ToLocalTime().AddDays(days).TimeOfDay;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        if (_date is null || _startTime is null)
+            return;
+        var startLocal = DateTime.SpecifyKind(_date.Value.Date + _startTime.Value, DateTimeKind.Local);
+        var newStart = new DateTimeOffset(startLocal);
+        DateTimeOffset? newEnd = null;
+        if (_endTime is TimeSpan endTime)
+        {
+            var endLocal = DateTime.SpecifyKind(_date.Value.Date + endTime, DateTimeKind.Local);
+            if (endTime < _startTime.Value)
+                endLocal = endLocal.AddDays(1);
+            newEnd = new DateTimeOffset(endLocal);
+        }
+
+        MudDialog.Close(DialogResult.Ok(new Result(newStart, newEnd, _entireSeries, _notify)));
+    }
+
+    public sealed record Result(DateTimeOffset NewStart, DateTimeOffset? NewEnd, bool EntireSeriesFollowing, bool Notify);
+}

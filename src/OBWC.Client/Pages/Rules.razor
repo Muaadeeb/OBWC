@@ -1,0 +1,55 @@
+@page "/rules"
+@inject ClubApi Club
+@inject AuthApi Auth
+@inject ISnackbar Snackbar
+
+<PageTitle>Games People Play and Rules They Follow · OBWC</PageTitle>
+<h1>Games People Play and Rules They Follow</h1>
+<p class="lede">A way for new people to see who plays a rule set, and for members to find players.</p>
+<MudTextField @bind-Value="_filter" Label="Find a rule set" Variant="Variant.Outlined" Class="mb-3" Immediate="true" />
+<MudExpansionPanels>
+    @foreach (var rule in Filtered)
+    {
+        <MudExpansionPanel Text="@rule.Name">
+            @if (!string.IsNullOrWhiteSpace(rule.PublishedPlayers))
+            {
+                <p>From the club list: @rule.PublishedPlayers</p>
+            }
+            @foreach (var player in rule.Players)
+            {
+                <p><strong>@player.DisplayName</strong> @player.Note</p>
+            }
+            <AuthorizeView Roles="Member,Admin,SuperAdmin">
+                <Authorized>
+                    @if (_me is not null && rule.Players.All(player => player.OwnerUserId != _me))
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Play(rule.Id)">I play this</MudButton>
+                    }
+                </Authorized>
+            </AuthorizeView>
+        </MudExpansionPanel>
+    }
+</MudExpansionPanels>
+
+@code {
+    private List<RuleSetDto> _rules = [];
+    private string _filter = "";
+    private string? _me;
+    private IEnumerable<RuleSetDto> Filtered => _rules.Where(rule => rule.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _rules = (await Club.GetRuleSetsAsync()).ToList();
+        _me = (await Auth.MeAsync())?.Id;
+    }
+
+    private async Task Play(Guid id)
+    {
+        try
+        {
+            await Club.AddPlayerAsync(id, new SavePlayerRequest());
+            _rules = (await Club.GetRuleSetsAsync()).ToList();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

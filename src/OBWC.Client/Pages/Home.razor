@@ -1,0 +1,37 @@
+﻿@page "/"
+@inject ClubApi Club
+
+<PageTitle>Omaha Beach Wargaming Club</PageTitle>
+<section class="hero">
+    <div class="club-mark">OBWC</div>
+    <div>
+        <p class="eyebrow">Omaha · tabletop</p>
+        <h1>Omaha Beach Wargaming Club</h1>
+        <p class="lede">@(_lead ?? "Historical and miniature gaming, with a calendar the whole club can read.")</p>
+    </div>
+</section>
+<div class="photo-slot">A photo from a club game day goes here.</div>
+<NextEventCard />
+<div class="link-grid">
+    <a href="about"><strong>About Us</strong>Mission, officers, and dues.</a>
+    <a href="schedule"><strong>Game Schedule</strong>See what is on the table, or schedule a game.</a>
+    <a href="rules"><strong>Games &amp; Rules</strong>Rule sets members play.</a>
+    <a href="stores"><strong>Game Stores</strong>People who work so we can play.</a>
+    <a href="contact"><strong>Contact</strong>Write the club.</a>
+</div>
+
+@code {
+    private string? _lead;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var about = await Club.GetContentAsync(ContentKeys.About);
+            _lead = about?.Body.Split("\n\n", StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        }
+        catch (ClubApiException)
+        {
+        }
+    }
+}

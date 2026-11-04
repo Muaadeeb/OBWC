@@ -1,0 +1,129 @@
+@page "/about"
+@inject ClubApi Club
+@inject ISnackbar Snackbar
+
+<PageTitle>About Us · OBWC</PageTitle>
+<h1>About Us</h1>
+@if (_page is null && _info is null)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <div style="white-space:pre-wrap">@_page?.Body</div>
+    @if (_info is not null)
+    {
+        <MudSimpleTable Class="mt-4" Dense="true">
+            <tbody>
+                <tr><th>Adult membership</th><td>@_info.AdultDues</td></tr>
+                <tr><th>Student (@_info.StudentDuesNote)</th><td>@_info.StudentDues</td></tr>
+                <tr><th>Friend of OBWC (FOBWC)</th><td>@_info.FriendDues</td></tr>
+                <tr><th>Officer term</th><td>@_info.OfficerTerm, elections at the @_info.ElectionMeeting</td></tr>
+            </tbody>
+        </MudSimpleTable>
+    }
+    <h2>Officers</h2>
+    <p>Officers are elected at the May meeting for a one-year term.</p>
+    @if (_officers.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">The current board will be listed here.</MudAlert>
+    }
+    else
+    {
+        <MudSimpleTable>
+            <thead><tr><th>Role</th><th>Name</th><th>Term</th></tr></thead>
+            <tbody>
+            @foreach (var officer in _officers)
+            {
+                <tr>
+                    <td>@officer.RoleTitle</td>
+                    <td>@officer.DisplayName</td>
+                    <td>@officer.TermLabel</td>
+                </tr>
+            }
+            </tbody>
+        </MudSimpleTable>
+    }
+    <div class="photo-slot">A club photo goes here.</div>
+    <AuthorizeView Roles="Admin,SuperAdmin">
+        <Authorized>
+            <MudButton Variant="Variant.Outlined" Class="mt-3" OnClick="@(() => _editing = !_editing)">Edit about page</MudButton>
+            @if (_editing && _page is not null && _info is not null)
+            {
+                <MudPaper Class="pa-3 mt-3" Outlined="true">
+                    <MudTextField @bind-Value="_title" Label="Title" />
+                    <MudTextField @bind-Value="_body" Label="Body" Lines="8" Class="mt-2" />
+                    <MudTextField @bind-Value="_contact" Label="Contact email" Class="mt-2" />
+                    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                    <h3 class="mt-4">Add an officer</h3>
+                    <MudTextField @bind-Value="_role" Label="Role" />
+                    <MudTextField @bind-Value="_name" Label="Name" />
+                    <MudTextField @bind-Value="_term" Label="Term" />
+                    <MudButton Class="mt-2" Variant="Variant.Outlined" OnClick="AddOfficer">Add officer</MudButton>
+                </MudPaper>
+            }
+        </Authorized>
+    </AuthorizeView>
+}
+
+@code {
+    private ContentPageDto? _page;
+    private PublicInfoDto? _info;
+    private List<OfficerDto> _officers = [];
+    private bool _editing;
+    private string _title = "";
+    private string _body = "";
+    private string _contact = "";
+    private string _role = "";
+    private string _name = "";
+    private string _term = "";
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _page = await Club.GetContentAsync(ContentKeys.About);
+        _info = await Club.GetPublicInfoAsync();
+        _officers = (await Club.GetOfficersAsync()).ToList();
+        _title = _page?.Title ?? "About Us";
+        _body = _page?.Body ?? "";
+        _contact = _info?.ContactEmail ?? "";
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            await Club.UpdateContentAsync(ContentKeys.About, new SaveContentRequest { Title = _title, Body = _body });
+            if (_info is not null)
+            {
+                await Club.UpdatePublicInfoAsync(new UpdatePublicInfoRequest
+                {
+                    ContactEmail = _contact,
+                    AdultDues = _info.AdultDues,
+                    StudentDues = _info.StudentDues,
+                    StudentDuesNote = _info.StudentDuesNote,
+                    FriendDues = _info.FriendDues,
+                    OfficerTerm = _info.OfficerTerm,
+                    ElectionMeeting = _info.ElectionMeeting
+                });
+            }
+            await Load();
+            Snackbar.Add("About page saved.", Severity.Success);
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task AddOfficer()
+    {
+        if (string.IsNullOrWhiteSpace(_role) || string.IsNullOrWhiteSpace(_name))
+            return;
+        try
+        {
+            await Club.CreateOfficerAsync(new SaveOfficerRequest { RoleTitle = _role.Trim(), DisplayName = _name.Trim(), TermLabel = string.IsNullOrWhiteSpace(_term) ? null : _term.Trim() });
+            _role = _name = _term = "";
+            await Load();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

@@ -426,3 +426,7 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# Local overrides and uploaded club files
+appsettings.*.local.json
+**/App_Data/

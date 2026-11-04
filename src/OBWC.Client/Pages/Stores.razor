@@ -1,0 +1,55 @@
+@page "/stores"
+@inject ClubApi Club
+@inject ISnackbar Snackbar
+
+<PageTitle>People Who Work so We Can Play · OBWC</PageTitle>
+<h1>People Who Work so We Can Play</h1>
+@foreach (var store in _stores)
+{
+    <MudExpansionPanels Class="mb-2">
+        <MudExpansionPanel Text="@store.Name">
+            @if (!string.IsNullOrWhiteSpace(store.FormerName)) { <p>formerly @store.FormerName</p> }
+            @if (!string.IsNullOrWhiteSpace(store.Address)) { <p>@store.Address</p> }
+            @if (!string.IsNullOrWhiteSpace(store.Description)) { <p>@store.Description</p> }
+            <ul>
+                @if (!string.IsNullOrWhiteSpace(store.Bullet1)) { <li>@store.Bullet1</li> }
+                @if (!string.IsNullOrWhiteSpace(store.Bullet2)) { <li>@store.Bullet2</li> }
+                @if (!string.IsNullOrWhiteSpace(store.Bullet3)) { <li>@store.Bullet3</li> }
+            </ul>
+            <AuthorizeView Roles="Admin,SuperAdmin">
+                <Authorized><MudButton Color="Color.Error" OnClick="() => Remove(store.Id)">Remove</MudButton></Authorized>
+            </AuthorizeView>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+}
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <MudPaper Class="pa-3 mt-3" Outlined="true">
+            <MudTextField @bind-Value="_name" Label="Name" />
+            <MudTextField @bind-Value="_former" Label="Formerly" />
+            <MudTextField @bind-Value="_address" Label="Address" />
+            <MudTextField @bind-Value="_description" Label="Description" />
+            <MudTextField @bind-Value="_b1" Label="Bullet 1" />
+            <MudTextField @bind-Value="_b2" Label="Bullet 2" />
+            <MudTextField @bind-Value="_b3" Label="Bullet 3" />
+            <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Add">Add store</MudButton>
+        </MudPaper>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private List<StoreDto> _stores = [];
+    private string _name = "", _former = "", _address = "", _description = "", _b1 = "", _b2 = "", _b3 = "";
+    protected override async Task OnInitializedAsync() => _stores = (await Club.GetStoresAsync()).ToList();
+    private async Task Add()
+    {
+        try
+        {
+            await Club.CreateStoreAsync(new SaveStoreRequest { Name = _name, FormerName = _former, Address = _address, Description = _description, Bullet1 = _b1, Bullet2 = _b2, Bullet3 = _b3 });
+            _name = _former = _address = _description = _b1 = _b2 = _b3 = "";
+            _stores = (await Club.GetStoresAsync()).ToList();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+    private async Task Remove(Guid id) { await Club.DeleteStoreAsync(id); _stores = (await Club.GetStoresAsync()).ToList(); }
+}

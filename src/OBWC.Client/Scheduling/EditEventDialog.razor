@@ -1,0 +1,113 @@
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Edit event details</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_venue" Label="Venue" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_address" Label="Address" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_online" Label="Discord / online link" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudNumericField T="int?" @bind-Value="_playerCap" Label="Player cap (Going)" Variant="Variant.Outlined"
+                                 Margin="Margin.Dense" Min="1" Max="64" Clearable="true"
+                                 HelperText="Overflow goes to the waitlist. Lowering the cap waitlists the newest Going replies." />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_locationNotes" Label="Location notes" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_notes" Label="Notes" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="string" @bind-Value="_ruleSetId" Label="Rule set" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    <MudSelectItem T="string" Value="@string.Empty">(none)</MudSelectItem>
+                    @foreach (var ruleSet in RuleSets)
+                    {
+                        <MudSelectItem T="string" Value="@ruleSet.Id.ToString()">@ruleSet.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Notes { get; set; }
+    [Parameter] public string? Venue { get; set; }
+    [Parameter] public string? Address { get; set; }
+    [Parameter] public string? OnlineLink { get; set; }
+    [Parameter] public string? LocationNotes { get; set; }
+    [Parameter] public int? PlayerCap { get; set; }
+    [Parameter] public Guid? RuleSetId { get; set; }
+    [Parameter] public IReadOnlyList<RuleSetDto> RuleSets { get; set; } = [];
+
+    private string _title = "";
+    private string _notes = "";
+    private string _venue = "";
+    private string _address = "";
+    private string _online = "";
+    private string _locationNotes = "";
+    private int? _playerCap;
+    private string _ruleSetId = "";
+
+    protected override void OnParametersSet()
+    {
+        _title = Title ?? "";
+        _notes = Notes ?? "";
+        _venue = Venue ?? "";
+        _address = Address ?? "";
+        _online = OnlineLink ?? "";
+        _locationNotes = LocationNotes ?? "";
+        _playerCap = PlayerCap;
+        _ruleSetId = RuleSetId?.ToString() ?? "";
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        if (_playerCap is int cap && cap < 1)
+        {
+            Snackbar.Add("Player cap must be at least 1, or leave it blank.", Severity.Warning);
+            return;
+        }
+
+        Guid? ruleSet = Guid.TryParse(_ruleSetId, out var parsed) ? parsed : null;
+        MudDialog.Close(DialogResult.Ok(new Result(
+            string.IsNullOrWhiteSpace(_title) ? null : _title.Trim(),
+            string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim(),
+            string.IsNullOrWhiteSpace(_venue) ? null : _venue.Trim(),
+            string.IsNullOrWhiteSpace(_address) ? null : _address.Trim(),
+            string.IsNullOrWhiteSpace(_online) ? null : _online.Trim(),
+            string.IsNullOrWhiteSpace(_locationNotes) ? null : _locationNotes.Trim(),
+            _playerCap,
+            ruleSet)));
+    }
+
+    public sealed record Result(
+        string? Title,
+        string? Notes,
+        string? Venue,
+        string? Address,
+        string? OnlineLink,
+        string? LocationNotes,
+        int? PlayerCap,
+        Guid? RuleSetId);
+}

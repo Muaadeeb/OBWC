@@ -1,0 +1,53 @@
+@page "/account/profile"
+@attribute [Authorize]
+@inject AuthApi Auth
+@inject ISnackbar Snackbar
+
+<PageTitle>Profile · OBWC</PageTitle>
+<h1>Profile</h1>
+@if (_user is null)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <p>@_user.Email</p>
+    <p>Roles: @string.Join(", ", _user.Roles)</p>
+    <MudTextField @bind-Value="_name" Label="Display name" />
+    <MudSelect T="MembershipType?" @bind-Value="_type" Label="Membership" Clearable="true">
+        <MudSelectItem T="MembershipType?" Value="@MembershipType.Adult">Adult</MudSelectItem>
+        <MudSelectItem T="MembershipType?" Value="@MembershipType.Student">Student, 22 and under</MudSelectItem>
+        <MudSelectItem T="MembershipType?" Value="@MembershipType.FriendOfObwc">Friend of OBWC</MudSelectItem>
+    </MudSelect>
+    <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save profile</MudButton>
+    <h2 class="mt-4">Change password</h2>
+    <MudTextField @bind-Value="_current" Label="Current password" InputType="InputType.Password" />
+    <MudTextField @bind-Value="_next" Label="New password" InputType="InputType.Password" />
+    <MudButton Class="mt-2" Variant="Variant.Outlined" OnClick="ChangePassword">Update password</MudButton>
+}
+
+@code {
+    private CurrentUserDto? _user;
+    private string _name = "", _current = "", _next = "";
+    private MembershipType? _type;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = await Auth.MeAsync();
+        _name = _user?.DisplayName ?? "";
+        _type = _user?.MembershipType;
+    }
+
+    private async Task Save()
+    {
+        var (user, error) = await Auth.UpdateProfileAsync(new UpdateProfileRequest { DisplayName = _name, MembershipType = _type });
+        if (error is not null) Snackbar.Add(error, Severity.Error);
+        else { _user = user; Snackbar.Add("Profile saved.", Severity.Success); }
+    }
+
+    private async Task ChangePassword()
+    {
+        var error = await Auth.ChangePasswordAsync(new ChangePasswordRequest { CurrentPassword = _current, NewPassword = _next });
+        Snackbar.Add(error ?? "Password updated.", error is null ? Severity.Success : Severity.Error);
+    }
+}

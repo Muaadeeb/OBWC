@@ -1,0 +1,30 @@
+@page "/contact"
+@inject ClubApi Club
+@inject ISnackbar Snackbar
+
+<PageTitle>Contact Us · OBWC</PageTitle>
+<h1>Contact Us</h1>
+<p>Write the club at <a href="mailto:@_info?.ContactEmail">@_info?.ContactEmail</a>.</p>
+<MudTextField @bind-Value="_name" Label="Your name" />
+<MudTextField @bind-Value="_email" Label="Your email" />
+<MudTextField @bind-Value="_message" Label="Message" Lines="5" />
+<div style="position:absolute; left:-9999px" aria-hidden="true">
+    <MudTextField @bind-Value="_website" Label="Website" />
+</div>
+<MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Send">Send</MudButton>
+
+@code {
+    private PublicInfoDto? _info;
+    private string _name = "", _email = "", _message = "", _website = "";
+    protected override async Task OnInitializedAsync() => _info = await Club.GetPublicInfoAsync();
+    private async Task Send()
+    {
+        try
+        {
+            var note = await Club.SendContactAsync(new ContactRequest { Name = _name, Email = _email, Message = _message, Website = _website });
+            Snackbar.Add(note ?? "Sent.", Severity.Success);
+            _message = "";
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}
