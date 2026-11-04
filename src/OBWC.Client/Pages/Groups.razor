@@ -1,0 +1,51 @@
+@page "/groups"
+@inject ClubApi Club
+@inject ISnackbar Snackbar
+
+<PageTitle>Other Area Gaming Groups · OBWC</PageTitle>
+<h1>Other Area Gaming Groups</h1>
+@foreach (var group in _groups)
+{
+    <MudExpansionPanels Class="mb-2">
+        <MudExpansionPanel Text="@group.Name">
+            <p style="white-space:pre-wrap">@group.Description</p>
+            <AuthorizeView Roles="Admin,SuperAdmin">
+                <Authorized><MudButton Color="Color.Error" OnClick="() => Remove(group.Id)">Remove</MudButton></Authorized>
+            </AuthorizeView>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+}
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <MudPaper Class="pa-3 mt-3" Outlined="true">
+            <MudTextField @bind-Value="_name" Label="Name" />
+            <MudTextField @bind-Value="_body" Label="Description" Lines="3" />
+            <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Add">Add group</MudButton>
+        </MudPaper>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private List<GroupDto> _groups = [];
+    private string _name = "";
+    private string _body = "";
+
+    protected override async Task OnInitializedAsync() => _groups = (await Club.GetGroupsAsync()).ToList();
+
+    private async Task Add()
+    {
+        try
+        {
+            await Club.CreateGroupAsync(new SaveGroupRequest { Name = _name, Description = _body });
+            _name = _body = "";
+            _groups = (await Club.GetGroupsAsync()).ToList();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task Remove(Guid id)
+    {
+        await Club.DeleteGroupAsync(id);
+        _groups = (await Club.GetGroupsAsync()).ToList();
+    }
+}

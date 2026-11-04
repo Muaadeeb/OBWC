@@ -1,0 +1,37 @@
+@page "/account/confirm-email"
+@inject AuthApi Auth
+@inject NavigationManager Navigation
+
+<PageTitle>Confirm email · OBWC</PageTitle>
+<h1>Confirm email</h1>
+@if (_message is not null) { <MudAlert Severity="@(_ok ? Severity.Success : Severity.Error)">@_message</MudAlert> }
+<MudButton Href="/account/login" Variant="Variant.Filled" Color="Color.Primary" Class="mt-3">Sign in</MudButton>
+
+@code {
+    private string? _message;
+    private bool _ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var query = Parse(new Uri(Navigation.Uri).Query);
+        if (!query.TryGetValue("userId", out var userId) || !query.TryGetValue("token", out var token))
+        {
+            _message = "This confirmation link is incomplete.";
+            return;
+        }
+        var error = await Auth.ConfirmAsync(new ConfirmEmailRequest { UserId = userId, Token = token });
+        _ok = error is null;
+        _message = error ?? "Email confirmed. You can sign in.";
+    }
+
+    private static Dictionary<string, string> Parse(string query)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var part in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = part.Split('=', 2);
+            result[Uri.UnescapeDataString(pair[0])] = pair.Length > 1 ? Uri.UnescapeDataString(pair[1]) : "";
+        }
+        return result;
+    }
+}

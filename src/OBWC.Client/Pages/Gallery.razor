@@ -1,0 +1,64 @@
+@page "/gallery"
+@inject ClubApi Club
+@inject ApiOrigin Origin
+@inject ISnackbar Snackbar
+
+<PageTitle>Gallery · OBWC</PageTitle>
+<h1>Gallery</h1>
+<p class="lede">At most @_gallery?.MaxPhotos photos of OBWC games run at public events (game days, Nuke-Con, NADBAG, ScroogeCon). @_gallery?.Count of @_gallery?.MaxPhotos used.</p>
+@if (_gallery is null || _gallery.Photos.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No public-event photos have been added yet.</MudAlert>
+}
+<div class="link-grid">
+    @foreach (var photo in _gallery?.Photos ?? [])
+    {
+        <figure>
+            <img src="@Origin.Absolute(photo.Url)" alt="@photo.Caption" style="width:100%; max-height:14rem; object-fit:cover" />
+            <figcaption><strong>@photo.Caption</strong><br />@photo.PublicEventName</figcaption>
+            <AuthorizeView Roles="Admin,SuperAdmin">
+                <Authorized>
+                    @if (photo.CanEdit)
+                    {
+                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Remove(photo.Id)">Delete</MudButton>
+                    }
+                </Authorized>
+            </AuthorizeView>
+        </figure>
+    }
+</div>
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <MudTextField @bind-Value="_caption" Label="Caption" Class="mt-3" />
+        <MudTextField @bind-Value="_eventName" Label="Public event" />
+        <InputFile OnChange="e => _file = e.File" />
+        <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" Disabled="_file is null" OnClick="Upload">Upload</MudButton>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private GalleryListDto? _gallery;
+    private string _caption = "", _eventName = "";
+    private IBrowserFile? _file;
+    protected override async Task OnInitializedAsync() => _gallery = await Club.GetGalleryAsync();
+    private async Task Upload()
+    {
+        if (_file is null) return;
+        try
+        {
+            await using var stream = _file.OpenReadStream(10 * 1024 * 1024);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            await Club.UploadPhotoAsync(_caption, _eventName, buffer.ToArray(), _file.Name);
+            _caption = _eventName = "";
+            _file = null;
+            _gallery = await Club.GetGalleryAsync();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+    private async Task Remove(Guid id)
+    {
+        await Club.DeletePhotoAsync(id);
+        _gallery = await Club.GetGalleryAsync();
+    }
+}

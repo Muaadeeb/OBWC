@@ -1,0 +1,103 @@
+@inject ClubApi Club
+@inject IJSRuntime Js
+@inject ISnackbar Snackbar
+
+<h1>@Heading</h1>
+<p class="lede">Members can read these files. Admins upload them.</p>
+@if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_docs.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No @Heading.ToLowerInvariant() file has been uploaded yet.</MudAlert>
+}
+else
+{
+    <MudList T="ClubDocumentDto">
+        @foreach (var doc in _docs)
+        {
+            <MudListItem>
+                <MudStack Row="true" AlignItems="AlignItems.Center">
+                    <div>
+                        <strong>@doc.Title</strong>
+                        <div class="mud-text-secondary">@doc.FileName</div>
+                    </div>
+                    <MudSpacer />
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Download(doc)">Download</MudButton>
+                    <AuthorizeView Roles="Admin,SuperAdmin">
+                        <Authorized>
+                            <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Remove(doc)">Delete</MudButton>
+                        </Authorized>
+                    </AuthorizeView>
+                </MudStack>
+            </MudListItem>
+        }
+    </MudList>
+}
+
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <MudPaper Class="pa-3 mt-4" Outlined="true">
+            <MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" />
+            <InputFile OnChange="OnFile" class="mt-3" />
+            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy || _file is null" OnClick="Upload">Upload</MudButton>
+        </MudPaper>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    [Parameter, EditorRequired] public DocumentCategory Category { get; set; }
+    [Parameter, EditorRequired] public string Heading { get; set; } = "";
+
+    private List<ClubDocumentDto> _docs = [];
+    private string? _error;
+    private string _title = "";
+    private IBrowserFile? _file;
+    private bool _busy;
+
+    protected override async Task OnParametersSetAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        try { _docs = (await Club.GetDocumentsAsync(Category)).ToList(); }
+        catch (ClubApiException ex) { _error = ex.Message; }
+    }
+
+    private void OnFile(InputFileChangeEventArgs args) => _file = args.File;
+
+    private async Task Upload()
+    {
+        if (_file is null || string.IsNullOrWhiteSpace(_title))
+            return;
+        _busy = true;
+        try
+        {
+            await using var stream = _file.OpenReadStream(10 * 1024 * 1024);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            await Club.UploadDocumentAsync(Category, _title.Trim(), null, buffer.ToArray(), _file.Name);
+            _title = "";
+            _file = null;
+            await Reload();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Download(ClubDocumentDto doc)
+    {
+        try
+        {
+            var (bytes, name) = await Club.DownloadDocumentAsync(doc.Id);
+            await Js.InvokeVoidAsync("obwcDownload", name, bytes);
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task Remove(ClubDocumentDto doc)
+    {
+        try { await Club.DeleteDocumentAsync(doc.Id); await Reload(); }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

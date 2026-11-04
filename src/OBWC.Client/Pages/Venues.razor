@@ -1,0 +1,68 @@
+@page "/venues"
+@inject ClubApi Club
+@inject ApiOrigin Origin
+@inject ISnackbar Snackbar
+
+<PageTitle>Venues · OBWC</PageTitle>
+<h1>Venues</h1>
+@if (_venues.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">Venues the club uses will be listed here, with an address and inside and outside photos.</MudAlert>
+}
+@foreach (var venue in _venues)
+{
+    <MudPaper Class="pa-3 mb-3" Outlined="true">
+        <h2>@venue.Name</h2>
+        <p>@venue.Address</p>
+        <p>@venue.Description</p>
+        <div class="link-grid">
+            <PhotoSlot Src="@Origin.Absolute(venue.InsidePhotoUrl)" Label="Inside photo" Alt="@($"{venue.Name} inside")" />
+            <PhotoSlot Src="@Origin.Absolute(venue.OutsidePhotoUrl)" Label="Outside photo" Alt="@($"{venue.Name} outside")" />
+        </div>
+        <AuthorizeView Roles="Admin,SuperAdmin">
+            <Authorized>
+                <InputFile OnChange="e => _inside[venue.Id] = e.File" />
+                <MudButton Size="Size.Small" OnClick="() => Upload(venue.Id, true)">Upload inside</MudButton>
+                <InputFile OnChange="e => _outside[venue.Id] = e.File" />
+                <MudButton Size="Size.Small" OnClick="() => Upload(venue.Id, false)">Upload outside</MudButton>
+            </Authorized>
+        </AuthorizeView>
+    </MudPaper>
+}
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <MudTextField @bind-Value="_name" Label="Name" />
+        <MudTextField @bind-Value="_address" Label="Address" />
+        <MudTextField @bind-Value="_description" Label="Description" />
+        <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Add">Add venue</MudButton>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private List<VenueDto> _venues = [];
+    private readonly Dictionary<Guid, IBrowserFile?> _inside = [];
+    private readonly Dictionary<Guid, IBrowserFile?> _outside = [];
+    private string _name = "", _address = "", _description = "";
+    protected override async Task OnInitializedAsync() => _venues = (await Club.GetVenuesAsync()).ToList();
+    private async Task Add()
+    {
+        try
+        {
+            await Club.CreateVenueAsync(new SaveVenueRequest { Name = _name, Address = _address, Description = _description });
+            _name = _address = _description = "";
+            _venues = (await Club.GetVenuesAsync()).ToList();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+    private async Task Upload(Guid id, bool inside)
+    {
+        var file = inside ? _inside.GetValueOrDefault(id) : _outside.GetValueOrDefault(id);
+        if (file is null) return;
+        await using var stream = file.OpenReadStream(10 * 1024 * 1024);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        var bytes = buffer.ToArray();
+        await Club.UploadVenuePhotosAsync(id, inside ? bytes : null, inside ? file.Name : null, inside ? null : bytes, inside ? null : file.Name);
+        _venues = (await Club.GetVenuesAsync()).ToList();
+    }
+}

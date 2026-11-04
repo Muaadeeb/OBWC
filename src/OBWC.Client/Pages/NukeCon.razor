@@ -1,0 +1,34 @@
+@page "/nuke-con"
+@inject ClubApi Club
+@inject ISnackbar Snackbar
+
+<PageTitle>Nuke-Con · OBWC</PageTitle>
+<h1>Nuke-Con</h1>
+<div style="white-space:pre-wrap">@_page?.Body</div>
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <MudTextField @bind-Value="_body" Label="Page text" Lines="6" Class="mt-3" />
+        <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private ContentPageDto? _page;
+    private string _body = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _page = await Club.GetContentAsync(ContentKeys.NukeCon);
+        _body = _page?.Body ?? "";
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            _page = await Club.UpdateContentAsync(ContentKeys.NukeCon, new SaveContentRequest { Title = "Nuke-Con", Body = _body });
+            Snackbar.Add("Saved.", Severity.Success);
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

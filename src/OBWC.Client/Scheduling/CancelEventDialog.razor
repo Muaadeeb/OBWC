@@ -1,0 +1,44 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Cancel event</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle2" Class="mb-2">@EventTitle</MudText>
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3" Variant="Variant.Outlined">
+            RSVP and check-in will close. The event stays on the calendar as cancelled.
+        </MudAlert>
+        <MudTextField @bind-Value="_reason" Label="Reason (optional)" Variant="Variant.Outlined" Lines="2"
+                      HelperText="Shown on the calendar and in the email to people who replied." />
+        @if (HasSeries)
+        {
+            <MudCheckBox T="bool" @bind-Value="_entireSeries" Color="Color.Error" Class="mt-3"
+                         Label="Also cancel this week and the following weeks in the series" />
+        }
+        <MudCheckBox T="bool" @bind-Value="_notify" Color="Color.Info" Class="mt-1"
+                     Label="Email Going / Maybe / Waitlist" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Keep event</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Submit">Cancel event</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string EventTitle { get; set; } = "Club game";
+    [Parameter] public bool HasSeries { get; set; }
+
+    private string _reason = "";
+    private bool _entireSeries;
+    private bool _notify = true;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit() =>
+        MudDialog.Close(DialogResult.Ok(new Result(
+            string.IsNullOrWhiteSpace(_reason) ? null : _reason.Trim(),
+            _entireSeries,
+            _notify)));
+
+    public sealed record Result(string? Reason, bool EntireSeries, bool Notify);
+}

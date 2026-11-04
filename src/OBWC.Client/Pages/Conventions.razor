@@ -1,0 +1,47 @@
+@page "/conventions"
+@inject ClubApi Club
+@inject ISnackbar Snackbar
+
+<PageTitle>Conventions · OBWC</PageTitle>
+<h1>Conventions</h1>
+<p class="lede">Conventions our members attend.</p>
+@foreach (var item in _items)
+{
+    <MudPaper Class="pa-3 mb-2" Outlined="true">
+        <h2>@item.Name</h2>
+        <p>@item.Description</p>
+        @if (!string.IsNullOrWhiteSpace(item.WhenText)) { <p>@item.WhenText</p> }
+        @if (!string.IsNullOrWhiteSpace(item.LocationText)) { <p>@item.LocationText</p> }
+        <AuthorizeView Roles="Admin,SuperAdmin">
+            <Authorized><MudButton Color="Color.Error" OnClick="() => Remove(item.Id)">Remove</MudButton></Authorized>
+        </AuthorizeView>
+    </MudPaper>
+}
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <MudPaper Class="pa-3" Outlined="true">
+            <MudTextField @bind-Value="_name" Label="Name" />
+            <MudTextField @bind-Value="_body" Label="Description" Lines="3" />
+            <MudTextField @bind-Value="_when" Label="When" />
+            <MudTextField @bind-Value="_where" Label="Where" />
+            <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Add">Add convention</MudButton>
+        </MudPaper>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private List<ConventionDto> _items = [];
+    private string _name = "", _body = "", _when = "", _where = "";
+    protected override async Task OnInitializedAsync() => _items = (await Club.GetConventionsAsync()).ToList();
+    private async Task Add()
+    {
+        try
+        {
+            await Club.CreateConventionAsync(new SaveConventionRequest { Name = _name, Description = _body, WhenText = _when, LocationText = _where });
+            _name = _body = _when = _where = "";
+            _items = (await Club.GetConventionsAsync()).ToList();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+    private async Task Remove(Guid id) { await Club.DeleteConventionAsync(id); _items = (await Club.GetConventionsAsync()).ToList(); }
+}

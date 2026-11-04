@@ -1,0 +1,116 @@
+@page "/my-schedule"
+@attribute [Authorize(Roles = "Member,Admin,SuperAdmin")]
+@inject ScheduleApi Schedule
+@inject ISnackbar Snackbar
+
+<PageTitle>My schedule · OBWC</PageTitle>
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2 flex-wrap">
+    <MudText Typo="Typo.h4" Class="mb-0">My schedule</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Text" Href="/schedule" StartIcon="@Icons.Material.Filled.CalendarMonth">Full calendar</MudButton>
+</MudStack>
+<p class="lede">Your Going, Waitlist, and Maybe nights, with a check-in button when the game is near.</p>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_items.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">Nothing on your schedule yet. Open the <MudLink Href="/schedule">calendar</MudLink> and RSVP Going or Maybe.</MudAlert>
+}
+else
+{
+    @foreach (var ev in _items)
+    {
+        var isPast = ev.ScheduledAt < DateTimeOffset.UtcNow.AddHours(-6);
+        var nearNow = !ev.IsCancelled && ev.IsPublished
+            && DateTimeOffset.UtcNow >= ev.ScheduledAt.AddHours(-3)
+            && DateTimeOffset.UtcNow <= (ev.EndsAt ?? ev.ScheduledAt.AddHours(4)).AddHours(6);
+        <MudPaper Class="pa-3 mb-2" Outlined="true">
+            <MudStack Row="true" Class="flex-wrap" AlignItems="AlignItems.Center">
+                <MudStack Spacing="0" Style="min-width:9rem">
+                    <MudText Typo="Typo.subtitle1"><strong>@ev.ScheduledAt.ToLocalTime().ToString("ddd d MMM")</strong></MudText>
+                    <MudText Typo="Typo.caption">@ev.ScheduledAt.ToLocalTime().ToString("t")</MudText>
+                </MudStack>
+                <MudStack Spacing="1" Style="flex:1">
+                    <MudText Typo="Typo.subtitle1">@(string.IsNullOrWhiteSpace(ev.Title) ? "Club game" : ev.Title)</MudText>
+                    @if (ev.IsCancelled) { <MudChip T="string" Size="Size.Small" Color="Color.Error">Cancelled</MudChip> }
+                    @if (!string.IsNullOrWhiteSpace(ev.Venue) || !string.IsNullOrWhiteSpace(ev.Address))
+                    {
+                        <MudText Typo="Typo.caption">@ev.Venue @(!string.IsNullOrWhiteSpace(ev.Address) ? "· " + ev.Address : "")</MudText>
+                    }
+                    <MudChip T="string" Size="Size.Small" Color="@(ev.MyRsvp switch { SessionRsvpStatus.Going => Color.Success, SessionRsvpStatus.Waitlist => Color.Info, SessionRsvpStatus.Maybe => Color.Warning, _ => Color.Default })">
+                        @ev.MyRsvp
+                    </MudChip>
+                    @if (ev.IAmCheckedIn) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success">Checked in</MudChip> }
+                    @if (isPast) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Past</MudChip> }
+                    @if (!ev.IsCancelled && ev.AllowPlayerRsvp && ev.IsPublished && !isPast)
+                    {
+                        <MudButtonGroup OverrideStyles="false" Class="mt-1">
+                            <MudButton Size="Size.Small" Color="Color.Success" Disabled="_busy" Variant="@(ev.MyRsvp is SessionRsvpStatus.Going or SessionRsvpStatus.Waitlist ? Variant.Filled : Variant.Outlined)" OnClick="() => RsvpAsync(ev.Id, SessionRsvpStatus.Going)">Going</MudButton>
+                            <MudButton Size="Size.Small" Color="Color.Warning" Disabled="_busy" Variant="@(ev.MyRsvp == SessionRsvpStatus.Maybe ? Variant.Filled : Variant.Outlined)" OnClick="() => RsvpAsync(ev.Id, SessionRsvpStatus.Maybe)">Maybe</MudButton>
+                            <MudButton Size="Size.Small" Color="Color.Error" Disabled="_busy" Variant="@(ev.MyRsvp == SessionRsvpStatus.NotGoing ? Variant.Filled : Variant.Outlined)" OnClick="() => RsvpAsync(ev.Id, SessionRsvpStatus.NotGoing)">No</MudButton>
+                        </MudButtonGroup>
+                    }
+                    @if (!ev.IsCancelled && nearNow)
+                    {
+                        <MudButton Size="Size.Small" Class="mt-1" Color="Color.Primary" Disabled="_busy" Variant="@(ev.IAmCheckedIn ? Variant.Filled : Variant.Outlined)" OnClick="() => CheckInAsync(ev)">
+                            @(ev.IAmCheckedIn ? "Checked in (undo)" : "Check in — I'm here")
+                        </MudButton>
+                    }
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+}
+
+@code {
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private List<CalendarEventDto> _items = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        try { _items = (await Schedule.MineAsync()).ToList(); }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task RsvpAsync(Guid id, SessionRsvpStatus status)
+    {
+        _busy = true;
+        try
+        {
+            var result = await Schedule.RsvpAsync(id, status);
+            if (!string.IsNullOrWhiteSpace(result.Note))
+                Snackbar.Add(result.Note, Severity.Info);
+            await ReloadAsync();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task CheckInAsync(CalendarEventDto ev)
+    {
+        _busy = true;
+        try
+        {
+            if (ev.IAmCheckedIn)
+                await Schedule.UndoCheckInAsync(ev.Id, null);
+            else
+                await Schedule.CheckInAsync(ev.Id, null);
+            await ReloadAsync();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+}

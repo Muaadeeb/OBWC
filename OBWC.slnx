@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OBWC.Api/OBWC.Api.csproj" />
+    <Project Path="src/OBWC.Client/OBWC.Client.csproj" />
+    <Project Path="src/OBWC.Shared/OBWC.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OBWC.Tests/OBWC.Tests.csproj" />
+  </Folder>
+</Solution>

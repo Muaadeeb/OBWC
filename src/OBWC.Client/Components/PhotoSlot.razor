@@ -1,0 +1,16 @@
+<div class="photo-slot">
+    @if (string.IsNullOrWhiteSpace(Src))
+    {
+        <span>@Label</span>
+    }
+    else
+    {
+        <img src="@Src" alt="@Alt" />
+    }
+</div>
+
+@code {
+    [Parameter] public string? Src { get; set; }
+    [Parameter] public string Label { get; set; } = "Club photo";
+    [Parameter] public string Alt { get; set; } = "";
+}
