@@ -16,6 +16,7 @@
     <PackageReference Include="MailKit" Version="4.18.2" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.14" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.14" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.14" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14">
       <PrivateAssets>all</PrivateAssets>
@@ -26,6 +27,11 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="OBWC.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Data/SqlServerMigrations/**" />
+    <None Include="Data/SqlServerMigrations/**" />
   </ItemGroup>
 
 </Project>

@@ -161,6 +161,9 @@ public sealed class ClubApi(HttpClient http)
     public Task<UserSummaryDto> UpdateRolesAsync(string id, UpdateRolesRequest request, CancellationToken cancellationToken = default) =>
         SendAsync<UserSummaryDto>(HttpMethod.Put, $"api/users/{id}/roles", request, cancellationToken);
 
+    public Task<IReadOnlyList<DevMailMessageDto>> GetDevMailAsync(CancellationToken cancellationToken = default) =>
+        GetListAsync<DevMailMessageDto>("api/dev/mail", cancellationToken);
+
     public async Task<string?> SendContactAsync(ContactRequest request, CancellationToken cancellationToken = default)
     {
         var response = await http.PostAsJsonAsync("api/contact", request, JsonDefaults.Options, cancellationToken);

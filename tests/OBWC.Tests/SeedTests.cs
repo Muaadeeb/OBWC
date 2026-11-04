@@ -21,16 +21,23 @@ public class SeedTests(ApiFactory factory) : IClassFixture<ApiFactory>, IDisposa
 
         var settings = File.ReadAllText(Path.Combine(RepoRoot(), "src", "OBWC.Api", "appsettings.json"));
         Assert.Contains("\"MaxGalleryPhotos\": 100", settings, StringComparison.Ordinal);
-        Assert.DoesNotContain("Password=secret", settings, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("YOUR_SQL_PASSWORD", settings, StringComparison.Ordinal);
+        Assert.Contains("\"Provider\": \"Sqlite\"", settings, StringComparison.Ordinal);
+        Assert.DoesNotContain("Password=", settings, StringComparison.OrdinalIgnoreCase);
+        var production = File.ReadAllText(Path.Combine(RepoRoot(), "src", "OBWC.Api", "appsettings.Production.json"));
+        Assert.Contains("YOUR_SQL_PASSWORD", production, StringComparison.Ordinal);
+        Assert.Contains("SqlServer", production, StringComparison.Ordinal);
     }
 
     [Fact]
     public void SqlServer_migration_is_checked_in()
     {
-        var directory = Path.Combine(RepoRoot(), "src", "OBWC.Api", "Data", "Migrations");
-        Assert.True(Directory.Exists(directory));
-        Assert.Contains(Directory.GetFiles(directory, "*.cs"), file => !file.EndsWith("Designer.cs", StringComparison.Ordinal) && !file.EndsWith("Snapshot.cs", StringComparison.Ordinal));
+        var sqlite = Path.Combine(RepoRoot(), "src", "OBWC.Api", "Data", "Migrations");
+        Assert.Contains(Directory.GetFiles(sqlite, "*.cs"), file => file.Contains("InitialSqlite", StringComparison.Ordinal) && !file.EndsWith("Designer.cs", StringComparison.Ordinal));
+
+        var sqlServer = Path.Combine(RepoRoot(), "src", "OBWC.Api", "Data", "SqlServerMigrations");
+        Assert.Contains(Directory.GetFiles(sqlServer, "*.cs"), file => file.Contains("IdentitySchemaVersion3", StringComparison.Ordinal));
+        var snapshot = File.ReadAllText(Path.Combine(sqlServer, "ApplicationDbContextModelSnapshot.cs"));
+        Assert.Contains("nvarchar(450)", snapshot, StringComparison.Ordinal);
     }
 
     [Fact]

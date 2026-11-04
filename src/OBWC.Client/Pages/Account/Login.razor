@@ -5,8 +5,8 @@
 <PageTitle>Member sign in · OBWC</PageTitle>
 <MudPaper Class="pa-4" Outlined="true" Style="max-width:28rem">
     <h1>Member sign in</h1>
-    <MudTextField @bind-Value="_email" Label="Email" InputType="InputType.Email" />
-    <MudTextField @bind-Value="_password" Label="Password" InputType="InputType.Password" />
+    <MudTextField @bind-Value="_email" Label="Email" InputType="InputType.Email" Variant="Variant.Outlined" Required="true" />
+    <MudTextField @bind-Value="_password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Required="true" Class="mt-3" />
     @if (!string.IsNullOrEmpty(_error)) { <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert> }
     <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit">Sign in</MudButton>
     <div class="mt-3">

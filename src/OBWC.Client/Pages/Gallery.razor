@@ -5,60 +5,120 @@
 
 <PageTitle>Gallery · OBWC</PageTitle>
 <h1>Gallery</h1>
-<p class="lede">At most @_gallery?.MaxPhotos photos of OBWC games run at public events (game days, Nuke-Con, NADBAG, ScroogeCon). @_gallery?.Count of @_gallery?.MaxPhotos used.</p>
-@if (_gallery is null || _gallery.Photos.Count == 0)
+<p class="lede">At most @(_gallery?.MaxPhotos ?? 100) photos of OBWC games run at public events (game days, Nuke-Con, NADBAG, ScroogeCon). No painted-mini showcases. @(_gallery is null ? "" : $"{_gallery.Count} of {_gallery.MaxPhotos} used.")</p>
+
+@if (_loading)
 {
-    <MudAlert Severity="Severity.Info">No public-event photos have been added yet.</MudAlert>
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 }
-<div class="link-grid">
-    @foreach (var photo in _gallery?.Photos ?? [])
-    {
-        <figure>
-            <img src="@Origin.Absolute(photo.Url)" alt="@photo.Caption" style="width:100%; max-height:14rem; object-fit:cover" />
-            <figcaption><strong>@photo.Caption</strong><br />@photo.PublicEventName</figcaption>
-            <AuthorizeView Roles="Admin,SuperAdmin">
-                <Authorized>
-                    @if (photo.CanEdit)
-                    {
-                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Remove(photo.Id)">Delete</MudButton>
-                    }
-                </Authorized>
-            </AuthorizeView>
-        </figure>
-    }
-</div>
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_gallery is null || _gallery.Photos.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No public-event photos have been added yet. An admin can upload them.</MudAlert>
+}
+else
+{
+    <div class="link-grid">
+        @foreach (var photo in _gallery.Photos)
+        {
+            <figure class="catalog-card">
+                <img class="gallery-photo" src="@Origin.Absolute(photo.Url)" alt="@photo.Caption" />
+                <figcaption><strong>@photo.Caption</strong><br />@photo.PublicEventName</figcaption>
+                <AuthorizeView Roles="Admin,SuperAdmin">
+                    <Authorized>
+                        @if (photo.CanEdit)
+                        {
+                            <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Remove(photo.Id)">Delete</MudButton>
+                        }
+                    </Authorized>
+                </AuthorizeView>
+            </figure>
+        }
+    </div>
+}
+
 <AuthorizeView Roles="Admin,SuperAdmin">
     <Authorized>
-        <MudTextField @bind-Value="_caption" Label="Caption" Class="mt-3" />
-        <MudTextField @bind-Value="_eventName" Label="Public event" />
-        <InputFile OnChange="e => _file = e.File" />
-        <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" Disabled="_file is null" OnClick="Upload">Upload</MudButton>
+        <MudPaper Class="pa-3 mt-4" Outlined="true">
+            <MudText Typo="Typo.subtitle1">Upload a public-event photo</MudText>
+            <MudTextField @bind-Value="_caption" Label="Caption" Variant="Variant.Outlined" Required="true" Class="mt-2" />
+            <MudTextField @bind-Value="_eventName" Label="Public event" Variant="Variant.Outlined" Required="true" Class="mt-2" HelperText="Game day, Nuke-Con, NADBAG, ScroogeCon, or another public event." />
+            <div class="mt-3">
+                <label>Photo <InputFile OnChange="OnFile" accept="image/*" /></label>
+            </div>
+            @if (!string.IsNullOrEmpty(_formError))
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">@_formError</MudAlert>
+            }
+            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Upload">Upload</MudButton>
+        </MudPaper>
     </Authorized>
 </AuthorizeView>
 
 @code {
     private GalleryListDto? _gallery;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string? _formError;
     private string _caption = "", _eventName = "";
     private IBrowserFile? _file;
-    protected override async Task OnInitializedAsync() => _gallery = await Club.GetGalleryAsync();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _gallery = await Club.GetGalleryAsync(); }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void OnFile(InputFileChangeEventArgs args)
+    {
+        _file = args.File;
+        _formError = null;
+    }
+
     private async Task Upload()
     {
-        if (_file is null) return;
+        _formError = null;
+        if (string.IsNullOrWhiteSpace(_caption) || string.IsNullOrWhiteSpace(_eventName))
+        {
+            _formError = "Enter a caption and the public event.";
+            return;
+        }
+        if (_file is null)
+        {
+            _formError = "Choose a photo.";
+            return;
+        }
+        _busy = true;
         try
         {
             await using var stream = _file.OpenReadStream(10 * 1024 * 1024);
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer);
-            await Club.UploadPhotoAsync(_caption, _eventName, buffer.ToArray(), _file.Name);
+            await Club.UploadPhotoAsync(_caption.Trim(), _eventName.Trim(), buffer.ToArray(), _file.Name);
             _caption = _eventName = "";
             _file = null;
-            _gallery = await Club.GetGalleryAsync();
+            Snackbar.Add("Photo added.", Severity.Success);
+            await Load();
         }
         catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
     }
+
     private async Task Remove(Guid id)
     {
-        await Club.DeletePhotoAsync(id);
-        _gallery = await Club.GetGalleryAsync();
+        try
+        {
+            await Club.DeletePhotoAsync(id);
+            await Load();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
 }

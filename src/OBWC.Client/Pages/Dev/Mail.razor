@@ -1,0 +1,70 @@
+@page "/dev/mail"
+@inject ClubApi Club
+@inject IConfiguration Configuration
+@inject NavigationManager Navigation
+
+<PageTitle>Dev mail · OBWC</PageTitle>
+<h1>Dev mail</h1>
+<p class="lede">Development only. Confirmation and reset links are listed here when SMTP is not configured. They are also written to the API log.</p>
+
+@if (!_enabled)
+{
+    <MudAlert Severity="Severity.Warning">This page is only available while the client is running in Development.</MudAlert>
+}
+else if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_items.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No messages yet. Register an account or use Forgot password, then refresh this page.</MudAlert>
+}
+else
+{
+    @foreach (var item in _items)
+    {
+        <MudPaper Class="pa-3 mb-3" Outlined="true">
+            <MudText Typo="Typo.subtitle1">@item.Subject</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">To @item.To</MudText>
+            <pre style="white-space:pre-wrap">@item.Body</pre>
+            @if (!string.IsNullOrWhiteSpace(item.Link))
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="@item.Link">Open link</MudButton>
+            }
+        </MudPaper>
+    }
+}
+
+@code {
+    private bool _enabled;
+    private bool _loading = true;
+    private string? _error;
+    private List<DevMailMessageDto> _items = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _enabled = Configuration.GetValue("DevTools:Enabled", false);
+        if (!_enabled)
+        {
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            _items = (await Club.GetDevMailAsync()).Reverse().ToList();
+        }
+        catch (ClubApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

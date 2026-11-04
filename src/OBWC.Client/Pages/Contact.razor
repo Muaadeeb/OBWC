@@ -4,27 +4,64 @@
 
 <PageTitle>Contact Us · OBWC</PageTitle>
 <h1>Contact Us</h1>
-<p>Write the club at <a href="mailto:@_info?.ContactEmail">@_info?.ContactEmail</a>.</p>
-<MudTextField @bind-Value="_name" Label="Your name" />
-<MudTextField @bind-Value="_email" Label="Your email" />
-<MudTextField @bind-Value="_message" Label="Message" Lines="5" />
-<div style="position:absolute; left:-9999px" aria-hidden="true">
-    <MudTextField @bind-Value="_website" Label="Website" />
-</div>
-<MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Send">Send</MudButton>
+<p class="lede">Write the club at <a href="mailto:@(_info?.ContactEmail ?? "nmh16055@gmail.com")">@(_info?.ContactEmail ?? "nmh16055@gmail.com")</a>.</p>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Class="pa-4 account-card" Outlined="true">
+        <MudTextField @bind-Value="_name" Label="Your name" Variant="Variant.Outlined" Required="true" />
+        <MudTextField @bind-Value="_email" Label="Your email" Variant="Variant.Outlined" Required="true" InputType="InputType.Email" Class="mt-3" />
+        <MudTextField @bind-Value="_message" Label="Message" Variant="Variant.Outlined" Required="true" Lines="5" Class="mt-3" />
+        <div style="position:absolute; left:-9999px" aria-hidden="true">
+            <label>Website <input @bind="_website" tabindex="-1" autocomplete="off" /></label>
+        </div>
+        @if (!string.IsNullOrEmpty(_formError))
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">@_formError</MudAlert>
+        }
+        <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Send">Send</MudButton>
+    </MudPaper>
+}
 
 @code {
     private PublicInfoDto? _info;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _formError;
     private string _name = "", _email = "", _message = "", _website = "";
-    protected override async Task OnInitializedAsync() => _info = await Club.GetPublicInfoAsync();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _info = await Club.GetPublicInfoAsync(); }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Warning); }
+        finally { _loading = false; }
+    }
+
     private async Task Send()
     {
+        _formError = null;
+        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_email) || string.IsNullOrWhiteSpace(_message))
+        {
+            _formError = "Enter your name, email, and a message.";
+            return;
+        }
+        if (!_email.Contains('@'))
+        {
+            _formError = "Enter an email address.";
+            return;
+        }
+        _busy = true;
         try
         {
-            var note = await Club.SendContactAsync(new ContactRequest { Name = _name, Email = _email, Message = _message, Website = _website });
+            var note = await Club.SendContactAsync(new ContactRequest { Name = _name.Trim(), Email = _email.Trim(), Message = _message.Trim(), Website = _website });
             Snackbar.Add(note ?? "Sent.", Severity.Success);
             _message = "";
         }
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
     }
 }

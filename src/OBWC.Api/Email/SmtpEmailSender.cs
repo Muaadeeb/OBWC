@@ -24,6 +24,12 @@ public sealed class EmailOutbox
             _items.Add(email);
     }
 
+    public IReadOnlyList<CapturedEmail> Snapshot()
+    {
+        lock (_gate)
+            return _items.ToArray();
+    }
+
     public CapturedEmail? LatestTo(string email)
     {
         lock (_gate)
@@ -92,7 +98,14 @@ public sealed class SmtpEmailSender(
         {
             if (environment.IsDevelopment() || environment.IsEnvironment("Testing"))
             {
-                logger.LogInformation("SMTP is not configured. Captured {Subject} for {To}.", subject, to);
+                var link = new CapturedEmail(to, subject, textBody).Link;
+                logger.LogInformation(
+                    "SMTP is not configured. Captured {Subject} for {To}. Link: {Link}{NewLine}{Body}",
+                    subject,
+                    to,
+                    link ?? "(none)",
+                    Environment.NewLine,
+                    textBody);
                 return;
             }
 

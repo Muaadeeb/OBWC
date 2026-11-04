@@ -3,8 +3,12 @@
 @inject ISnackbar Snackbar
 
 <h1>@Heading</h1>
-<p class="lede">Members can read these files. Admins upload them.</p>
-@if (!string.IsNullOrEmpty(_error))
+<p class="lede">Members can read these files. Admins upload them. Nothing is shown until a file is added — the club text is not invented here.</p>
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
 {
     <MudAlert Severity="Severity.Error">@_error</MudAlert>
 }
@@ -39,8 +43,9 @@ else
 <AuthorizeView Roles="Admin,SuperAdmin">
     <Authorized>
         <MudPaper Class="pa-3 mt-4" Outlined="true">
-            <MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" />
-            <InputFile OnChange="OnFile" class="mt-3" />
+            <MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Required="true" />
+            <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined" Class="mt-2" />
+            <div class="mt-3"><label>File <InputFile OnChange="OnFile" /></label></div>
             <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy || _file is null" OnClick="Upload">Upload</MudButton>
         </MudPaper>
     </Authorized>
@@ -53,15 +58,19 @@ else
     private List<ClubDocumentDto> _docs = [];
     private string? _error;
     private string _title = "";
+    private string _description = "";
     private IBrowserFile? _file;
     private bool _busy;
+    private bool _loading = true;
 
     protected override async Task OnParametersSetAsync() => await Reload();
 
     private async Task Reload()
     {
-        try { _docs = (await Club.GetDocumentsAsync(Category)).ToList(); }
+        _loading = true;
+        try { _docs = (await Club.GetDocumentsAsync(Category)).ToList(); _error = null; }
         catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
     }
 
     private void OnFile(InputFileChangeEventArgs args) => _file = args.File;
@@ -76,8 +85,9 @@ else
             await using var stream = _file.OpenReadStream(10 * 1024 * 1024);
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer);
-            await Club.UploadDocumentAsync(Category, _title.Trim(), null, buffer.ToArray(), _file.Name);
+            await Club.UploadDocumentAsync(Category, _title.Trim(), string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(), buffer.ToArray(), _file.Name);
             _title = "";
+            _description = "";
             _file = null;
             await Reload();
         }

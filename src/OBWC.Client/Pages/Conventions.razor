@@ -4,44 +4,138 @@
 
 <PageTitle>Conventions · OBWC</PageTitle>
 <h1>Conventions</h1>
-<p class="lede">Conventions our members attend.</p>
+<p class="lede">Conventions our members attend. Nuke-Con and ScroogeCon are named on the club list. Dates and places stay blank until someone who knows them enters them.</p>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_items.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No conventions have been entered yet.</MudAlert>
+}
+
 @foreach (var item in _items)
 {
     <MudPaper Class="pa-3 mb-2" Outlined="true">
         <h2>@item.Name</h2>
-        <p>@item.Description</p>
-        @if (!string.IsNullOrWhiteSpace(item.WhenText)) { <p>@item.WhenText</p> }
-        @if (!string.IsNullOrWhiteSpace(item.LocationText)) { <p>@item.LocationText</p> }
+        @if (string.IsNullOrWhiteSpace(item.Description) && string.IsNullOrWhiteSpace(item.WhenText) && string.IsNullOrWhiteSpace(item.LocationText))
+        {
+            <p class="mud-text-secondary">Details have not been entered yet.</p>
+        }
+        else
+        {
+            @if (!string.IsNullOrWhiteSpace(item.Description)) { <p style="white-space:pre-wrap">@item.Description</p> }
+            @if (!string.IsNullOrWhiteSpace(item.WhenText)) { <p>@item.WhenText</p> }
+            @if (!string.IsNullOrWhiteSpace(item.LocationText)) { <p>@item.LocationText</p> }
+        }
+        @if (!string.IsNullOrWhiteSpace(item.WebsiteUrl))
+        {
+            <MudLink Href="@item.WebsiteUrl" Target="_blank">@item.WebsiteUrl</MudLink>
+        }
         <AuthorizeView Roles="Admin,SuperAdmin">
-            <Authorized><MudButton Color="Color.Error" OnClick="() => Remove(item.Id)">Remove</MudButton></Authorized>
+            <Authorized>
+                <div class="mt-2">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Edit(item)">Edit</MudButton>
+                    <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Remove(item.Id)">Remove</MudButton>
+                </div>
+            </Authorized>
         </AuthorizeView>
     </MudPaper>
 }
+
 <AuthorizeView Roles="Admin,SuperAdmin">
     <Authorized>
-        <MudPaper Class="pa-3" Outlined="true">
-            <MudTextField @bind-Value="_name" Label="Name" />
-            <MudTextField @bind-Value="_body" Label="Description" Lines="3" />
-            <MudTextField @bind-Value="_when" Label="When" />
-            <MudTextField @bind-Value="_where" Label="Where" />
-            <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Add">Add convention</MudButton>
+        <MudPaper Class="pa-3 mt-3" Outlined="true">
+            <MudText Typo="Typo.subtitle1">@(_editing is null ? "Add a convention" : "Edit convention")</MudText>
+            <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Required="true" Class="mt-2" />
+            <MudTextField @bind-Value="_body" Label="Description" Variant="Variant.Outlined" Lines="3" Class="mt-2" />
+            <MudTextField @bind-Value="_when" Label="When" Variant="Variant.Outlined" Class="mt-2" />
+            <MudTextField @bind-Value="_where" Label="Where" Variant="Variant.Outlined" Class="mt-2" />
+            <MudTextField @bind-Value="_url" Label="Website" Variant="Variant.Outlined" Class="mt-2" />
+            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">@(_editing is null ? "Add convention" : "Save convention")</MudButton>
+            @if (_editing is not null)
+            {
+                <MudButton Class="mt-3 ml-2" Variant="Variant.Text" OnClick="Clear">Cancel</MudButton>
+            }
         </MudPaper>
     </Authorized>
 </AuthorizeView>
 
 @code {
     private List<ConventionDto> _items = [];
-    private string _name = "", _body = "", _when = "", _where = "";
-    protected override async Task OnInitializedAsync() => _items = (await Club.GetConventionsAsync()).ToList();
-    private async Task Add()
+    private Guid? _editing;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string _name = "", _body = "", _when = "", _where = "", _url = "";
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _items = (await Club.GetConventionsAsync()).ToList(); }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void Edit(ConventionDto item)
+    {
+        _editing = item.Id;
+        _name = item.Name;
+        _body = item.Description ?? "";
+        _when = item.WhenText ?? "";
+        _where = item.LocationText ?? "";
+        _url = item.WebsiteUrl ?? "";
+    }
+
+    private void Clear() => (_editing, _name, _body, _when, _where, _url) = (null, "", "", "", "", "");
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Enter a convention name.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        var request = new SaveConventionRequest
+        {
+            Name = _name.Trim(),
+            Description = Blank(_body),
+            WhenText = Blank(_when),
+            LocationText = Blank(_where),
+            WebsiteUrl = Blank(_url)
+        };
+        try
+        {
+            if (_editing is Guid id)
+                await Club.UpdateConventionAsync(id, request);
+            else
+                await Club.CreateConventionAsync(request);
+            Clear();
+            await Load();
+            Snackbar.Add("Convention saved.", Severity.Success);
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Remove(Guid id)
     {
         try
         {
-            await Club.CreateConventionAsync(new SaveConventionRequest { Name = _name, Description = _body, WhenText = _when, LocationText = _where });
-            _name = _body = _when = _where = "";
-            _items = (await Club.GetConventionsAsync()).ToList();
+            await Club.DeleteConventionAsync(id);
+            if (_editing == id) Clear();
+            await Load();
         }
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
-    private async Task Remove(Guid id) { await Club.DeleteConventionAsync(id); _items = (await Club.GetConventionsAsync()).ToList(); }
+
+    private static string? Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

@@ -4,52 +4,144 @@
 
 <PageTitle>People Who Work so We Can Play · OBWC</PageTitle>
 <h1>People Who Work so We Can Play</h1>
-@foreach (var store in _stores)
+<p class="lede">Area game stores: an address, a short description, and three notes. Admins keep the list.</p>
+
+@if (_loading)
 {
-    <MudExpansionPanels Class="mb-2">
-        <MudExpansionPanel Text="@store.Name">
-            @if (!string.IsNullOrWhiteSpace(store.FormerName)) { <p>formerly @store.FormerName</p> }
-            @if (!string.IsNullOrWhiteSpace(store.Address)) { <p>@store.Address</p> }
-            @if (!string.IsNullOrWhiteSpace(store.Description)) { <p>@store.Description</p> }
-            <ul>
-                @if (!string.IsNullOrWhiteSpace(store.Bullet1)) { <li>@store.Bullet1</li> }
-                @if (!string.IsNullOrWhiteSpace(store.Bullet2)) { <li>@store.Bullet2</li> }
-                @if (!string.IsNullOrWhiteSpace(store.Bullet3)) { <li>@store.Bullet3</li> }
-            </ul>
-            <AuthorizeView Roles="Admin,SuperAdmin">
-                <Authorized><MudButton Color="Color.Error" OnClick="() => Remove(store.Id)">Remove</MudButton></Authorized>
-            </AuthorizeView>
-        </MudExpansionPanel>
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_stores.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No stores have been entered yet.</MudAlert>
+}
+else
+{
+    <MudExpansionPanels>
+        @foreach (var store in _stores)
+        {
+            <MudExpansionPanel Text="@store.Name">
+                @if (!string.IsNullOrWhiteSpace(store.FormerName)) { <p>formerly @store.FormerName</p> }
+                @if (!string.IsNullOrWhiteSpace(store.Address)) { <p>@store.Address</p> }
+                @if (!string.IsNullOrWhiteSpace(store.Description)) { <p>@store.Description</p> }
+                <ul>
+                    @if (!string.IsNullOrWhiteSpace(store.Bullet1)) { <li>@store.Bullet1</li> }
+                    @if (!string.IsNullOrWhiteSpace(store.Bullet2)) { <li>@store.Bullet2</li> }
+                    @if (!string.IsNullOrWhiteSpace(store.Bullet3)) { <li>@store.Bullet3</li> }
+                </ul>
+                <AuthorizeView Roles="Admin,SuperAdmin">
+                    <Authorized>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Edit(store)">Edit</MudButton>
+                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Remove(store.Id)">Remove</MudButton>
+                    </Authorized>
+                </AuthorizeView>
+            </MudExpansionPanel>
+        }
     </MudExpansionPanels>
 }
+
 <AuthorizeView Roles="Admin,SuperAdmin">
     <Authorized>
         <MudPaper Class="pa-3 mt-3" Outlined="true">
-            <MudTextField @bind-Value="_name" Label="Name" />
-            <MudTextField @bind-Value="_former" Label="Formerly" />
-            <MudTextField @bind-Value="_address" Label="Address" />
-            <MudTextField @bind-Value="_description" Label="Description" />
-            <MudTextField @bind-Value="_b1" Label="Bullet 1" />
-            <MudTextField @bind-Value="_b2" Label="Bullet 2" />
-            <MudTextField @bind-Value="_b3" Label="Bullet 3" />
-            <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Add">Add store</MudButton>
+            <MudText Typo="Typo.subtitle1">@(_editing is null ? "Add a store" : "Edit store")</MudText>
+            <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Required="true" Class="mt-2" />
+            <MudTextField @bind-Value="_former" Label="Formerly" Variant="Variant.Outlined" Class="mt-2" />
+            <MudTextField @bind-Value="_address" Label="Address" Variant="Variant.Outlined" Class="mt-2" />
+            <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined" Lines="3" Class="mt-2" />
+            <MudTextField @bind-Value="_b1" Label="Bullet 1" Variant="Variant.Outlined" Class="mt-2" />
+            <MudTextField @bind-Value="_b2" Label="Bullet 2" Variant="Variant.Outlined" Class="mt-2" />
+            <MudTextField @bind-Value="_b3" Label="Bullet 3" Variant="Variant.Outlined" Class="mt-2" />
+            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">@(_editing is null ? "Add store" : "Save store")</MudButton>
+            @if (_editing is not null)
+            {
+                <MudButton Class="mt-3 ml-2" Variant="Variant.Text" OnClick="Clear">Cancel</MudButton>
+            }
         </MudPaper>
     </Authorized>
 </AuthorizeView>
 
 @code {
     private List<StoreDto> _stores = [];
+    private Guid? _editing;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
     private string _name = "", _former = "", _address = "", _description = "", _b1 = "", _b2 = "", _b3 = "";
-    protected override async Task OnInitializedAsync() => _stores = (await Club.GetStoresAsync()).ToList();
-    private async Task Add()
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _stores = (await Club.GetStoresAsync()).ToList(); }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void Edit(StoreDto store)
+    {
+        _editing = store.Id;
+        _name = store.Name;
+        _former = store.FormerName ?? "";
+        _address = store.Address ?? "";
+        _description = store.Description ?? "";
+        _b1 = store.Bullet1 ?? "";
+        _b2 = store.Bullet2 ?? "";
+        _b3 = store.Bullet3 ?? "";
+    }
+
+    private void Clear()
+    {
+        _editing = null;
+        _name = _former = _address = _description = _b1 = _b2 = _b3 = "";
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Enter a store name.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        var request = new SaveStoreRequest
+        {
+            Name = _name.Trim(),
+            FormerName = Blank(_former),
+            Address = Blank(_address),
+            Description = Blank(_description),
+            Bullet1 = Blank(_b1),
+            Bullet2 = Blank(_b2),
+            Bullet3 = Blank(_b3)
+        };
+        try
+        {
+            if (_editing is Guid id)
+                await Club.UpdateStoreAsync(id, request);
+            else
+                await Club.CreateStoreAsync(request);
+            Clear();
+            await Load();
+            Snackbar.Add("Store saved.", Severity.Success);
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Remove(Guid id)
     {
         try
         {
-            await Club.CreateStoreAsync(new SaveStoreRequest { Name = _name, FormerName = _former, Address = _address, Description = _description, Bullet1 = _b1, Bullet2 = _b2, Bullet3 = _b3 });
-            _name = _former = _address = _description = _b1 = _b2 = _b3 = "";
-            _stores = (await Club.GetStoresAsync()).ToList();
+            await Club.DeleteStoreAsync(id);
+            if (_editing == id)
+                Clear();
+            await Load();
         }
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
-    private async Task Remove(Guid id) { await Club.DeleteStoreAsync(id); _stores = (await Club.GetStoresAsync()).ToList(); }
+
+    private static string? Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

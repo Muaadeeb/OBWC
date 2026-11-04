@@ -39,7 +39,7 @@ public class AuthController(
         await SendConfirmationAsync(user);
         return Accepted(new MessageResponse
         {
-            Message = "Account created. Check your email to confirm it before you sign in. If mail is not set up on this server yet, the confirmation link is written to the API log in Development."
+            Message = "Account created. Check your email to confirm it before you sign in. In Development, when SMTP is not configured, the confirmation link is in the API log and on the Dev mail page."
         });
     }
 
