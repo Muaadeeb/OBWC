@@ -1,6 +1,8 @@
 # Archived SQL Server migrations
 
-These files are the EF Core migrations generated for **SQL Server** (including the Identity schema version 3 fix). They are not compiled. The app applies the SQLite migrations in `Data/Migrations` while `Database:Provider` is `Sqlite`.
+These files are the EF Core migrations generated for **SQL Server** (including the Identity schema version 3 fix and `ClubContentMaintenance`). They are not compiled. The app applies the SQLite migrations in `Data/Migrations` while `Database:Provider` is `Sqlite`.
+
+`ClubContentMaintenance` matches the SQLite migration of the same name. It adds officer contact and photo columns, area-group game focus and contact, convention start and end dates (and drops the old free-text `WhenText` column), document visibility (existing rows become `MembersOnly`), and the `EventPhotos` table. Do not compile this folder and `Data/Migrations` at the same time.
 
 To run against SQL Server again:
 

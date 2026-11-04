@@ -1,5 +1,6 @@
 @page "/about"
 @inject ClubApi Club
+@inject ApiOrigin Origin
 @inject ISnackbar Snackbar
 
 <PageTitle>About Us · OBWC</PageTitle>
@@ -28,33 +29,34 @@ else
         </MudSimpleTable>
     }
     <h2>Officers</h2>
-    <p>Officers are elected at the May meeting for a one-year term. Names are entered by an admin after the election. None are listed until then.</p>
+    <p>Officers are elected at the May meeting for a one-year term. The list comes from the club records.</p>
     @if (_officers.Count == 0)
     {
         <MudAlert Severity="Severity.Info">The current board has not been entered yet.</MudAlert>
     }
     else
     {
-        <MudSimpleTable Hover="true">
-            <thead><tr><th>Role</th><th>Name</th><th>Term</th><th></th></tr></thead>
-            <tbody>
+        <div class="link-grid">
             @foreach (var officer in _officers)
             {
-                <tr>
-                    <td>@officer.RoleTitle</td>
-                    <td>@officer.DisplayName</td>
-                    <td>@(string.IsNullOrWhiteSpace(officer.TermLabel) ? "—" : officer.TermLabel)</td>
-                    <td>
-                        <AuthorizeView Roles="Admin,SuperAdmin">
-                            <Authorized>
-                                <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Text" OnClick="() => RemoveOfficer(officer.Id)">Remove</MudButton>
-                            </Authorized>
-                        </AuthorizeView>
-                    </td>
-                </tr>
+                <article class="catalog-card">
+                    @if (!string.IsNullOrWhiteSpace(officer.PhotoUrl))
+                    {
+                        <img class="gallery-photo" src="@Origin.Absolute(officer.PhotoUrl)" alt="" />
+                    }
+                    <h3>@officer.DisplayName</h3>
+                    <p>@officer.RoleTitle</p>
+                    @if (!string.IsNullOrWhiteSpace(officer.TermLabel))
+                    {
+                        <p>@officer.TermLabel</p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(officer.Contact))
+                    {
+                        <p>@officer.Contact</p>
+                    }
+                </article>
             }
-            </tbody>
-        </MudSimpleTable>
+        </div>
     }
     <div class="photo-slot">A club photo goes here. No photo has been added yet.</div>
     <AuthorizeView Roles="Admin,SuperAdmin">
@@ -73,12 +75,7 @@ else
                     <MudTextField @bind-Value="_term" Label="Officer term" Variant="Variant.Outlined" Class="mt-2" />
                     <MudTextField @bind-Value="_meeting" Label="Election meeting" Variant="Variant.Outlined" Class="mt-2" />
                     <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">Save</MudButton>
-                    <h3 class="mt-4">Add an officer</h3>
-                    <p class="mud-text-secondary">Enter the person elected at the May meeting. Do not invent a name.</p>
-                    <MudTextField @bind-Value="_role" Label="Role" Variant="Variant.Outlined" />
-                    <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Class="mt-2" />
-                    <MudTextField @bind-Value="_officerTerm" Label="Term" Variant="Variant.Outlined" Class="mt-2" />
-                    <MudButton Class="mt-2" Variant="Variant.Outlined" Disabled="_busy" OnClick="AddOfficer">Add officer</MudButton>
+                    <p class="mt-3"><MudLink Href="/admin/officers">Maintain officers</MudLink></p>
                 </MudPaper>
             }
         </Authorized>
@@ -102,9 +99,6 @@ else
     private string _friend = "";
     private string _term = "";
     private string _meeting = "";
-    private string _role = "";
-    private string _name = "";
-    private string _officerTerm = "";
 
     protected override async Task OnInitializedAsync() => await Load();
 
@@ -157,40 +151,5 @@ else
         }
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
         finally { _busy = false; }
-    }
-
-    private async Task AddOfficer()
-    {
-        if (string.IsNullOrWhiteSpace(_role) || string.IsNullOrWhiteSpace(_name))
-        {
-            Snackbar.Add("Enter a role and a name.", Severity.Warning);
-            return;
-        }
-        _busy = true;
-        try
-        {
-            await Club.CreateOfficerAsync(new SaveOfficerRequest
-            {
-                RoleTitle = _role.Trim(),
-                DisplayName = _name.Trim(),
-                TermLabel = string.IsNullOrWhiteSpace(_officerTerm) ? null : _officerTerm.Trim()
-            });
-            _role = _name = _officerTerm = "";
-            await Load();
-            _editing = true;
-        }
-        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
-        finally { _busy = false; }
-    }
-
-    private async Task RemoveOfficer(Guid id)
-    {
-        try
-        {
-            await Club.DeleteOfficerAsync(id);
-            await Load();
-            _editing = true;
-        }
-        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
 }

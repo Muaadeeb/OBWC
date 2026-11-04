@@ -130,6 +130,8 @@ public record CalendarEventDto
     public string OwnerDisplayName { get; init; } = "";
     public bool OwnerIsGm { get; init; }
     public bool CanEdit { get; init; }
+    public bool CanAddPhotos { get; init; }
+    public IReadOnlyList<EventPhotoDto> Photos { get; init; } = [];
     public string LocationDisplay { get; init; } = "";
 }
 

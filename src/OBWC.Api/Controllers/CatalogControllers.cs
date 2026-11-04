@@ -137,7 +137,9 @@ public class GroupsController(ApplicationDbContext db) : ClubApiController
     {
         group.Name = request.Name.Trim();
         group.Description = Clean(request.Description);
+        group.GameFocus = Clean(request.GameFocus);
         group.WebsiteUrl = Clean(request.WebsiteUrl);
+        group.Contact = Clean(request.Contact);
         group.SortOrder = request.SortOrder;
     }
 
@@ -146,7 +148,9 @@ public class GroupsController(ApplicationDbContext db) : ClubApiController
         Id = group.Id,
         Name = group.Name,
         Description = group.Description,
+        GameFocus = group.GameFocus,
         WebsiteUrl = group.WebsiteUrl,
+        Contact = group.Contact,
         SortOrder = group.SortOrder
     };
 }
@@ -171,7 +175,9 @@ public class ConventionsController(ApplicationDbContext db) : ClubApiController
     public async Task<ActionResult<ConventionDto>> Create(SaveConventionRequest request, CancellationToken cancellationToken)
     {
         var convention = new Convention { Id = Guid.NewGuid() };
-        Apply(convention, request);
+        var error = Apply(convention, request);
+        if (error is not null)
+            return Bad(error);
         db.Conventions.Add(convention);
         await db.SaveChangesAsync(cancellationToken);
         return Created($"/api/conventions/{convention.Id}", Map(convention));
@@ -184,7 +190,9 @@ public class ConventionsController(ApplicationDbContext db) : ClubApiController
         var convention = await db.Conventions.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (convention is null)
             return NotFound();
-        Apply(convention, request);
+        var error = Apply(convention, request);
+        if (error is not null)
+            return Bad(error);
         await db.SaveChangesAsync(cancellationToken);
         return Ok(Map(convention));
     }
@@ -201,14 +209,18 @@ public class ConventionsController(ApplicationDbContext db) : ClubApiController
         return NoContent();
     }
 
-    private static void Apply(Convention convention, SaveConventionRequest request)
+    private static string? Apply(Convention convention, SaveConventionRequest request)
     {
+        if (request.StartsOn is DateOnly start && request.EndsOn is DateOnly end && end < start)
+            return "The end date cannot be before the start date.";
         convention.Name = request.Name.Trim();
         convention.Description = Clean(request.Description);
-        convention.WhenText = Clean(request.WhenText);
+        convention.StartsOn = request.StartsOn;
+        convention.EndsOn = request.EndsOn;
         convention.LocationText = Clean(request.LocationText);
         convention.WebsiteUrl = Clean(request.WebsiteUrl);
         convention.SortOrder = request.SortOrder;
+        return null;
     }
 
     private static ConventionDto Map(Convention convention) => new()
@@ -216,7 +228,8 @@ public class ConventionsController(ApplicationDbContext db) : ClubApiController
         Id = convention.Id,
         Name = convention.Name,
         Description = convention.Description,
-        WhenText = convention.WhenText,
+        StartsOn = convention.StartsOn,
+        EndsOn = convention.EndsOn,
         LocationText = convention.LocationText,
         WebsiteUrl = convention.WebsiteUrl,
         SortOrder = convention.SortOrder

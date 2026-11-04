@@ -1,0 +1,77 @@
+@page "/documents"
+@inject ClubApi Club
+@inject IJSRuntime Js
+@inject ISnackbar Snackbar
+
+<PageTitle>Club documents · OBWC</PageTitle>
+<h1>Club documents</h1>
+<p class="lede">Public files are listed for everyone. Members-only files appear after you sign in. Uploaded times are Central Time (CT).</p>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_docs.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No documents are available to you yet.</MudAlert>
+}
+else
+{
+    @foreach (var group in _docs.GroupBy(doc => doc.Category))
+    {
+        <h2>@CategoryLabel(group.Key)</h2>
+        <MudList T="ClubDocumentDto">
+            @foreach (var doc in group)
+            {
+                <MudListItem>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap">
+                        <div>
+                            <strong>@doc.Title</strong>
+                            <div class="mud-text-secondary">@doc.FileName · @(doc.Visibility == DocumentVisibility.Public ? "Public" : "Members only") · @ClubTime.FormatDateTime(AsUtc(doc.CreatedAtUtc))</div>
+                        </div>
+                        <MudSpacer />
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Download(doc)">Download</MudButton>
+                    </MudStack>
+                </MudListItem>
+            }
+        </MudList>
+    }
+}
+
+@code {
+    private List<ClubDocumentDto> _docs = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _docs = (await Club.GetDocumentsAsync()).ToList(); }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task Download(ClubDocumentDto doc)
+    {
+        try
+        {
+            var (bytes, name) = await Club.DownloadDocumentAsync(doc.Id);
+            await Js.InvokeVoidAsync("obwcDownload", name, bytes);
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private static string CategoryLabel(DocumentCategory category) => category switch
+    {
+        DocumentCategory.Constitution => "Constitution",
+        DocumentCategory.Budget => "Budget",
+        DocumentCategory.Minutes => "Minutes",
+        _ => category.ToString()
+    };
+
+    private static DateTimeOffset AsUtc(DateTime value) =>
+        new(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero);
+}

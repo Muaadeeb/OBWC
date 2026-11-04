@@ -31,6 +31,14 @@ public sealed class ClubApi(HttpClient http)
     public Task DeleteOfficerAsync(Guid id, CancellationToken cancellationToken = default) =>
         DeleteAsync($"api/officers/{id}", cancellationToken);
 
+    public async Task<OfficerDto> UploadOfficerPhotoAsync(Guid id, byte[] content, string fileName, CancellationToken cancellationToken = default)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(FileContent(content, "image/png"), "file", fileName);
+        var response = await http.PostAsync($"api/officers/{id}/photo", form, cancellationToken);
+        return await ReadAsync<OfficerDto>(response, cancellationToken);
+    }
+
     public Task<IReadOnlyList<StoreDto>> GetStoresAsync(CancellationToken cancellationToken = default) =>
         GetListAsync<StoreDto>("api/stores", cancellationToken);
 
@@ -126,20 +134,52 @@ public sealed class ClubApi(HttpClient http)
     public Task DeletePhotoAsync(Guid id, CancellationToken cancellationToken = default) =>
         DeleteAsync($"api/gallery/{id}", cancellationToken);
 
-    public Task<IReadOnlyList<ClubDocumentDto>> GetDocumentsAsync(DocumentCategory category, CancellationToken cancellationToken = default) =>
-        GetListAsync<ClubDocumentDto>($"api/documents?category={category}", cancellationToken);
+    public Task<GalleryPhotoDto> UpdatePhotoAsync(Guid id, UpdateGalleryPhotoRequest request, CancellationToken cancellationToken = default) =>
+        SendAsync<GalleryPhotoDto>(HttpMethod.Put, $"api/gallery/{id}", request, cancellationToken);
 
-    public async Task<ClubDocumentDto> UploadDocumentAsync(DocumentCategory category, string title, string? description, byte[] content, string fileName, CancellationToken cancellationToken = default)
+    public async Task<EventPhotoDto> UploadEventPhotoAsync(Guid eventId, string caption, byte[] content, string fileName, CancellationToken cancellationToken = default)
     {
         using var form = new MultipartFormDataContent();
         form.Add(FileContent(content, "application/octet-stream"), "file", fileName);
+        form.Add(new StringContent(caption), "caption");
+        var response = await http.PostAsync($"api/events/{eventId}/photos", form, cancellationToken);
+        return await ReadAsync<EventPhotoDto>(response, cancellationToken);
+    }
+
+    public Task<EventPhotoDto> UpdateEventPhotoAsync(Guid eventId, Guid photoId, string caption, CancellationToken cancellationToken = default) =>
+        SendAsync<EventPhotoDto>(HttpMethod.Put, $"api/events/{eventId}/photos/{photoId}", new UpdateEventPhotoRequest { Caption = caption }, cancellationToken);
+
+    public Task DeleteEventPhotoAsync(Guid eventId, Guid photoId, CancellationToken cancellationToken = default) =>
+        DeleteAsync($"api/events/{eventId}/photos/{photoId}", cancellationToken);
+
+    public Task<IReadOnlyList<ClubDocumentDto>> GetDocumentsAsync(DocumentCategory? category = null, CancellationToken cancellationToken = default)
+    {
+        var url = category is null ? "api/documents" : $"api/documents?category={category}";
+        return GetListAsync<ClubDocumentDto>(url, cancellationToken);
+    }
+
+    public async Task<ClubDocumentDto> UploadDocumentAsync(
+        DocumentCategory category,
+        string title,
+        string? description,
+        DocumentVisibility visibility,
+        byte[] content,
+        string fileName,
+        CancellationToken cancellationToken = default)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(FileContent(content, "application/pdf"), "file", fileName);
         form.Add(new StringContent(title), "title");
         form.Add(new StringContent(category.ToString()), "category");
+        form.Add(new StringContent(visibility.ToString()), "visibility");
         if (!string.IsNullOrWhiteSpace(description))
             form.Add(new StringContent(description), "description");
         var response = await http.PostAsync("api/documents", form, cancellationToken);
         return await ReadAsync<ClubDocumentDto>(response, cancellationToken);
     }
+
+    public Task<ClubDocumentDto> RenameDocumentAsync(Guid id, RenameDocumentRequest request, CancellationToken cancellationToken = default) =>
+        SendAsync<ClubDocumentDto>(HttpMethod.Put, $"api/documents/{id}", request, cancellationToken);
 
     public async Task<(byte[] Bytes, string FileName)> DownloadDocumentAsync(Guid id, CancellationToken cancellationToken = default)
     {

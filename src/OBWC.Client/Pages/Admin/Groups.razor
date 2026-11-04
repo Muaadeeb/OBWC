@@ -1,0 +1,142 @@
+@page "/admin/groups"
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ClubApi Club
+@inject ISnackbar Snackbar
+
+<PageTitle>Area groups · OBWC</PageTitle>
+<h1>Area groups</h1>
+<p class="lede">Name, game focus, URL, contact, and description. NADBAG stays as it was seeded. Do not invent details that were not given to you.</p>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_groups.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No groups have been entered.</MudAlert>
+}
+else
+{
+    <MudSimpleTable Hover="true" Dense="true">
+        <thead><tr><th>Name</th><th>Game focus</th><th>Contact</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var group in _groups)
+        {
+            <tr>
+                <td>@group.Name</td>
+                <td>@(group.GameFocus ?? "—")</td>
+                <td>@(group.Contact ?? "—")</td>
+                <td>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => Edit(group)">Edit</MudButton>
+                    <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Text" OnClick="() => Remove(group.Id)">Remove</MudButton>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </MudSimpleTable>
+}
+
+<MudPaper Class="pa-3 mt-4" Outlined="true">
+    <MudText Typo="Typo.subtitle1">@(_editing is null ? "Add a group" : "Edit group")</MudText>
+    <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Required="true" Class="mt-2" />
+    <MudTextField @bind-Value="_focus" Label="Game focus" Variant="Variant.Outlined" Class="mt-2" />
+    <MudTextField @bind-Value="_url" Label="URL" Variant="Variant.Outlined" Class="mt-2" />
+    <MudTextField @bind-Value="_contact" Label="Contact" Variant="Variant.Outlined" Class="mt-2" />
+    <MudTextField @bind-Value="_body" Label="Description" Variant="Variant.Outlined" Lines="3" Class="mt-2" />
+    <MudNumericField T="int" @bind-Value="_order" Label="Display order" Variant="Variant.Outlined" Class="mt-2" />
+    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">@(_editing is null ? "Add group" : "Save group")</MudButton>
+    @if (_editing is not null)
+    {
+        <MudButton Class="mt-3 ml-2" Variant="Variant.Text" OnClick="Clear">Cancel</MudButton>
+    }
+</MudPaper>
+
+@code {
+    private List<GroupDto> _groups = [];
+    private Guid? _editing;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string _name = "";
+    private string _focus = "";
+    private string _url = "";
+    private string _contact = "";
+    private string _body = "";
+    private int _order;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _groups = (await Club.GetGroupsAsync()).ToList(); _error = null; }
+        catch (ClubApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void Edit(GroupDto group)
+    {
+        _editing = group.Id;
+        _name = group.Name;
+        _focus = group.GameFocus ?? "";
+        _url = group.WebsiteUrl ?? "";
+        _contact = group.Contact ?? "";
+        _body = group.Description ?? "";
+        _order = group.SortOrder;
+    }
+
+    private void Clear()
+    {
+        _editing = null;
+        _name = _focus = _url = _contact = _body = "";
+        _order = 0;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Enter a group name.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        var request = new SaveGroupRequest
+        {
+            Name = _name.Trim(),
+            GameFocus = Blank(_focus),
+            WebsiteUrl = Blank(_url),
+            Contact = Blank(_contact),
+            Description = Blank(_body),
+            SortOrder = _order
+        };
+        try
+        {
+            if (_editing is Guid id)
+                await Club.UpdateGroupAsync(id, request);
+            else
+                await Club.CreateGroupAsync(request);
+            Clear();
+            await Load();
+            Snackbar.Add("Group saved.", Severity.Success);
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Remove(Guid id)
+    {
+        try
+        {
+            await Club.DeleteGroupAsync(id);
+            if (_editing == id) Clear();
+            await Load();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private static string? Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}

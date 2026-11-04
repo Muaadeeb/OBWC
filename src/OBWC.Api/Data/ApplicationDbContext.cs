@@ -12,6 +12,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<GamingGroup> GamingGroups => Set<GamingGroup>();
     public DbSet<Convention> Conventions => Set<Convention>();
     public DbSet<GalleryPhoto> GalleryPhotos => Set<GalleryPhoto>();
+    public DbSet<EventPhoto> EventPhotos => Set<EventPhoto>();
     public DbSet<ClubDocument> ClubDocuments => Set<ClubDocument>();
     public DbSet<ContentPage> ContentPages => Set<ContentPage>();
     public DbSet<SiteSetting> SiteSettings => Set<SiteSetting>();
@@ -67,6 +68,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasMany(session => session.Attendances)
                 .WithOne(row => row.PlaySession!)
                 .HasForeignKey(row => row.PlaySessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(session => session.Photos)
+                .WithOne(photo => photo.PlaySession!)
+                .HasForeignKey(photo => photo.PlaySessionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -134,16 +139,30 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             entity.Property(group => group.Name).HasMaxLength(200).IsRequired();
             entity.Property(group => group.Description).HasMaxLength(4000);
+            entity.Property(group => group.GameFocus).HasMaxLength(200);
             entity.Property(group => group.WebsiteUrl).HasMaxLength(500);
+            entity.Property(group => group.Contact).HasMaxLength(200);
         });
 
         builder.Entity<Convention>(entity =>
         {
             entity.Property(convention => convention.Name).HasMaxLength(200).IsRequired();
             entity.Property(convention => convention.Description).HasMaxLength(4000);
-            entity.Property(convention => convention.WhenText).HasMaxLength(200);
             entity.Property(convention => convention.LocationText).HasMaxLength(300);
             entity.Property(convention => convention.WebsiteUrl).HasMaxLength(500);
+        });
+
+        builder.Entity<EventPhoto>(entity =>
+        {
+            entity.Property(photo => photo.Caption).HasMaxLength(200).IsRequired();
+            entity.Property(photo => photo.RelativePath).HasMaxLength(400).IsRequired();
+            entity.Property(photo => photo.ContentType).HasMaxLength(100).IsRequired();
+            entity.Property(photo => photo.OwnerUserId).HasMaxLength(450).IsRequired();
+            entity.HasIndex(photo => photo.PlaySessionId);
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(photo => photo.OwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<GalleryPhoto>(entity =>
@@ -167,6 +186,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(document => document.FileName).HasMaxLength(260).IsRequired();
             entity.Property(document => document.RelativePath).HasMaxLength(400).IsRequired();
             entity.Property(document => document.ContentType).HasMaxLength(100).IsRequired();
+            entity.Property(document => document.Visibility).HasConversion<string>().HasMaxLength(32);
             entity.Property(document => document.OwnerUserId).HasMaxLength(450).IsRequired();
             entity.HasIndex(document => document.Category);
             entity.HasOne<ApplicationUser>()
@@ -195,6 +215,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(officer => officer.RoleTitle).HasMaxLength(100).IsRequired();
             entity.Property(officer => officer.DisplayName).HasMaxLength(100).IsRequired();
             entity.Property(officer => officer.TermLabel).HasMaxLength(100);
+            entity.Property(officer => officer.Contact).HasMaxLength(200);
+            entity.Property(officer => officer.PhotoPath).HasMaxLength(400);
+            entity.Property(officer => officer.PhotoContentType).HasMaxLength(100);
         });
     }
 }

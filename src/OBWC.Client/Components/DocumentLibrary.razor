@@ -3,7 +3,7 @@
 @inject ISnackbar Snackbar
 
 <h1>@Heading</h1>
-<p class="lede">Members can read these files. Admins upload them. Nothing is shown until a file is added — the club text is not invented here.</p>
+<p class="lede">Files an admin has posted for this section. Members-only files stay off the public list.</p>
 @if (_loading)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -14,7 +14,7 @@ else if (!string.IsNullOrEmpty(_error))
 }
 else if (_docs.Count == 0)
 {
-    <MudAlert Severity="Severity.Info">No @Heading.ToLowerInvariant() file has been uploaded yet.</MudAlert>
+    <MudAlert Severity="Severity.Info">No @Heading.ToLowerInvariant() file is available to you yet.</MudAlert>
 }
 else
 {
@@ -22,34 +22,22 @@ else
         @foreach (var doc in _docs)
         {
             <MudListItem>
-                <MudStack Row="true" AlignItems="AlignItems.Center">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap">
                     <div>
                         <strong>@doc.Title</strong>
-                        <div class="mud-text-secondary">@doc.FileName</div>
+                        <div class="mud-text-secondary">@doc.FileName · @VisibilityLabel(doc.Visibility) · @ClubTime.FormatDateTime(AsUtc(doc.CreatedAtUtc))</div>
+                        @if (!string.IsNullOrWhiteSpace(doc.Description))
+                        {
+                            <div>@doc.Description</div>
+                        }
                     </div>
                     <MudSpacer />
                     <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Download(doc)">Download</MudButton>
-                    <AuthorizeView Roles="Admin,SuperAdmin">
-                        <Authorized>
-                            <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Remove(doc)">Delete</MudButton>
-                        </Authorized>
-                    </AuthorizeView>
                 </MudStack>
             </MudListItem>
         }
     </MudList>
 }
-
-<AuthorizeView Roles="Admin,SuperAdmin">
-    <Authorized>
-        <MudPaper Class="pa-3 mt-4" Outlined="true">
-            <MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Required="true" />
-            <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined" Class="mt-2" />
-            <div class="mt-3"><label>File <InputFile OnChange="OnFile" /></label></div>
-            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy || _file is null" OnClick="Upload">Upload</MudButton>
-        </MudPaper>
-    </Authorized>
-</AuthorizeView>
 
 @code {
     [Parameter, EditorRequired] public DocumentCategory Category { get; set; }
@@ -57,10 +45,6 @@ else
 
     private List<ClubDocumentDto> _docs = [];
     private string? _error;
-    private string _title = "";
-    private string _description = "";
-    private IBrowserFile? _file;
-    private bool _busy;
     private bool _loading = true;
 
     protected override async Task OnParametersSetAsync() => await Reload();
@@ -73,28 +57,6 @@ else
         finally { _loading = false; }
     }
 
-    private void OnFile(InputFileChangeEventArgs args) => _file = args.File;
-
-    private async Task Upload()
-    {
-        if (_file is null || string.IsNullOrWhiteSpace(_title))
-            return;
-        _busy = true;
-        try
-        {
-            await using var stream = _file.OpenReadStream(10 * 1024 * 1024);
-            using var buffer = new MemoryStream();
-            await stream.CopyToAsync(buffer);
-            await Club.UploadDocumentAsync(Category, _title.Trim(), string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(), buffer.ToArray(), _file.Name);
-            _title = "";
-            _description = "";
-            _file = null;
-            await Reload();
-        }
-        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
-        finally { _busy = false; }
-    }
-
     private async Task Download(ClubDocumentDto doc)
     {
         try
@@ -105,9 +67,9 @@ else
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
 
-    private async Task Remove(ClubDocumentDto doc)
-    {
-        try { await Club.DeleteDocumentAsync(doc.Id); await Reload(); }
-        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
-    }
+    private static string VisibilityLabel(DocumentVisibility visibility) =>
+        visibility == DocumentVisibility.Public ? "Public" : "Members only";
+
+    private static DateTimeOffset AsUtc(DateTime value) =>
+        new(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero);
 }

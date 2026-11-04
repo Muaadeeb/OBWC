@@ -530,7 +530,26 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         var names = await db.Users.AsNoTracking()
             .Where(user => ownerIds.Contains(user.Id))
             .ToDictionaryAsync(user => user.Id, user => user.DisplayName, cancellationToken);
-        return sessions.Select(session => Map(session, viewerUserId, viewerIsAdmin, gmSet, names)).ToList();
+        var viewerIsGm = !string.IsNullOrEmpty(viewerUserId)
+            && !string.IsNullOrEmpty(gmRoleId)
+            && await db.UserRoles.AnyAsync(link => link.RoleId == gmRoleId && link.UserId == viewerUserId, cancellationToken);
+        var sessionIds = sessions.Select(session => session.Id).ToList();
+        var photos = sessionIds.Count == 0
+            ? []
+            : await db.EventPhotos.AsNoTracking()
+                .Where(photo => sessionIds.Contains(photo.PlaySessionId))
+                .OrderBy(photo => photo.CreatedAtUtc)
+                .ToListAsync(cancellationToken);
+        var photosBySession = photos.GroupBy(photo => photo.PlaySessionId)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<EventPhoto>)group.ToList());
+        return sessions.Select(session => Map(
+            session,
+            viewerUserId,
+            viewerIsAdmin,
+            viewerIsGm,
+            gmSet,
+            names,
+            photosBySession.GetValueOrDefault(session.Id) ?? [])).ToList();
     }
 
     public static string BuildIcs(string calendarName, string slug, IReadOnlyList<CalendarEventDto> events)
@@ -693,8 +712,10 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         PlaySession session,
         string? viewerUserId,
         bool viewerIsAdmin,
+        bool viewerIsGm,
         HashSet<string> gmIds,
-        IReadOnlyDictionary<string, string> names)
+        IReadOnlyDictionary<string, string> names,
+        IReadOnlyList<EventPhoto> photos)
     {
         var rows = session.Attendances;
         var mine = string.IsNullOrEmpty(viewerUserId) ? null : rows.FirstOrDefault(row => row.UserId == viewerUserId);
@@ -737,6 +758,15 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             OwnerDisplayName = string.IsNullOrWhiteSpace(ownerName) ? "Member" : ownerName,
             OwnerIsGm = gmIds.Contains(session.CreatedByUserId),
             CanEdit = viewerIsAdmin || (!string.IsNullOrEmpty(viewerUserId) && viewerUserId == session.CreatedByUserId),
+            CanAddPhotos = viewerIsAdmin || (viewerIsGm && !string.IsNullOrEmpty(viewerUserId) && viewerUserId == session.CreatedByUserId),
+            Photos = photos.Select(photo => new EventPhotoDto
+            {
+                Id = photo.Id,
+                Caption = photo.Caption,
+                Url = $"api/files/event-photos/{photo.Id}",
+                CreatedAtUtc = DateTime.SpecifyKind(photo.CreatedAtUtc, DateTimeKind.Utc),
+                CanEdit = viewerIsAdmin || (!string.IsNullOrEmpty(viewerUserId) && viewerUserId == photo.OwnerUserId)
+            }).ToArray(),
             LocationDisplay = string.IsNullOrWhiteSpace(location) ? "Not listed" : location
         };
     }

@@ -1,0 +1,5 @@
+@page "/members/minutes"
+@attribute [Authorize(Roles = "Member,Admin,SuperAdmin,GM")]
+
+<PageTitle>Minutes · OBWC</PageTitle>
+<DocumentLibrary Category="DocumentCategory.Minutes" Heading="Meeting minutes" />

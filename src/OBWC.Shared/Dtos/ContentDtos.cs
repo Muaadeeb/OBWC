@@ -81,6 +81,9 @@ public record SaveOfficerRequest
     [MaxLength(100)]
     public string? TermLabel { get; init; }
 
+    [MaxLength(200)]
+    public string? Contact { get; init; }
+
     public int SortOrder { get; init; }
 }
 
@@ -90,6 +93,8 @@ public record OfficerDto
     public string RoleTitle { get; init; } = "";
     public string DisplayName { get; init; } = "";
     public string? TermLabel { get; init; }
+    public string? Contact { get; init; }
+    public string? PhotoUrl { get; init; }
     public int SortOrder { get; init; }
 }
 
@@ -167,8 +172,14 @@ public record SaveGroupRequest
     [MaxLength(4000)]
     public string? Description { get; init; }
 
+    [MaxLength(200)]
+    public string? GameFocus { get; init; }
+
     [MaxLength(500)]
     public string? WebsiteUrl { get; init; }
+
+    [MaxLength(200)]
+    public string? Contact { get; init; }
 
     public int SortOrder { get; init; }
 }
@@ -178,7 +189,9 @@ public record GroupDto
     public Guid Id { get; init; }
     public string Name { get; init; } = "";
     public string? Description { get; init; }
+    public string? GameFocus { get; init; }
     public string? WebsiteUrl { get; init; }
+    public string? Contact { get; init; }
     public int SortOrder { get; init; }
 }
 
@@ -190,8 +203,9 @@ public record SaveConventionRequest
     [MaxLength(4000)]
     public string? Description { get; init; }
 
-    [MaxLength(200)]
-    public string? WhenText { get; init; }
+    public DateOnly? StartsOn { get; init; }
+
+    public DateOnly? EndsOn { get; init; }
 
     [MaxLength(300)]
     public string? LocationText { get; init; }
@@ -207,7 +221,8 @@ public record ConventionDto
     public Guid Id { get; init; }
     public string Name { get; init; } = "";
     public string? Description { get; init; }
-    public string? WhenText { get; init; }
+    public DateOnly? StartsOn { get; init; }
+    public DateOnly? EndsOn { get; init; }
     public string? LocationText { get; init; }
     public string? WebsiteUrl { get; init; }
     public int SortOrder { get; init; }
@@ -230,12 +245,50 @@ public record GalleryListDto
     public IReadOnlyList<GalleryPhotoDto> Photos { get; init; } = [];
 }
 
+public record UpdateGalleryPhotoRequest
+{
+    [Required, MaxLength(200)]
+    public string Caption { get; init; } = "";
+
+    [Required, MaxLength(200)]
+    public string PublicEventName { get; init; } = "";
+}
+
+public record EventPhotoDto
+{
+    public Guid Id { get; init; }
+    public string Caption { get; init; } = "";
+    public string Url { get; init; } = "";
+    public DateTime CreatedAtUtc { get; init; }
+    public bool CanEdit { get; init; }
+}
+
+public record UpdateEventPhotoRequest
+{
+    [Required, MaxLength(200)]
+    public string Caption { get; init; } = "";
+}
+
 public record ClubDocumentDto
 {
     public Guid Id { get; init; }
     public DocumentCategory Category { get; init; }
+    public DocumentVisibility Visibility { get; init; } = DocumentVisibility.MembersOnly;
     public string Title { get; init; } = "";
     public string? Description { get; init; }
     public string FileName { get; init; } = "";
     public DateTime CreatedAtUtc { get; init; }
+}
+
+public record RenameDocumentRequest
+{
+    [Required, MaxLength(200)]
+    public string Title { get; init; } = "";
+
+    [MaxLength(2000)]
+    public string? Description { get; init; }
+
+    public DocumentCategory? Category { get; init; }
+
+    public DocumentVisibility? Visibility { get; init; }
 }
