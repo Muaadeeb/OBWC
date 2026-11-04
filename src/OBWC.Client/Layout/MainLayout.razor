@@ -115,8 +115,12 @@
     {
         if (!firstRender)
             return;
+        var wide = await Js.InvokeAsync<bool>("obwcViewport.wide");
         var stored = await Js.InvokeAsync<string?>("obwcStorage.get", "obwc.theme");
+        _open = wide;
         _dark = stored == "dark";
+        if (_dark)
+            await Js.InvokeVoidAsync("obwcTheme.set", true);
         StateHasChanged();
     }
 

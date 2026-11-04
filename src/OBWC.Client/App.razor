@@ -5,9 +5,9 @@
                 <NotAuthorized>
                     @if (context.User.Identity?.IsAuthenticated == true)
                     {
-                        <LayoutView Layout="@typeof(MainLayout)">
-                            <MudAlert Severity="Severity.Warning">Your account does not have access to this page.</MudAlert>
-                        </LayoutView>
+                        <h1>This page is limited</h1>
+                        <p>Your account does not have access to this page.</p>
+                        <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary">Back home</MudButton>
                     }
                     else
                     {

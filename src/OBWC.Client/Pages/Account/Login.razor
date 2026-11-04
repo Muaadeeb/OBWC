@@ -3,12 +3,12 @@
 @inject NavigationManager Nav
 
 <PageTitle>Member sign in · OBWC</PageTitle>
-<MudPaper Class="pa-4" Outlined="true" Style="max-width:28rem">
+<MudPaper Class="pa-4 account-card" Outlined="true">
     <h1>Member sign in</h1>
-    <MudTextField @bind-Value="_email" Label="Email" InputType="InputType.Email" Variant="Variant.Outlined" Required="true" />
-    <MudTextField @bind-Value="_password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Required="true" Class="mt-3" />
-    @if (!string.IsNullOrEmpty(_error)) { <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert> }
-    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit">Sign in</MudButton>
+    <MudTextField @bind-Value="_email" Label="Email" InputType="InputType.Email" Variant="Variant.Outlined" />
+    <MudTextField @bind-Value="_password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Class="mt-3" />
+    @if (!string.IsNullOrEmpty(_error)) { <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert> }
+    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Submit">Sign in</MudButton>
     <div class="mt-3">
         <MudLink Href="/account/register">Create an account</MudLink>
         · <MudLink Href="/account/forgot-password">Forgot password</MudLink>
@@ -17,13 +17,34 @@
 
 @code {
     private string _email = "", _password = "", _error = "";
+    private bool _busy;
     [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
 
     private async Task Submit()
     {
-        _error = await Auth.LoginAsync(new LoginRequest { Email = _email, Password = _password }) ?? "";
-        if (string.IsNullOrEmpty(_error))
-            Nav.NavigateTo(Safe(ReturnUrl));
+        _error = "";
+        if (!FormChecks.IsEmail(_email))
+        {
+            _error = "Enter a valid email address.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_password))
+        {
+            _error = "Enter your password.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            _error = await Auth.LoginAsync(new LoginRequest { Email = _email.Trim(), Password = _password }) ?? "";
+            if (string.IsNullOrEmpty(_error))
+                Nav.NavigateTo(Safe(ReturnUrl));
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private static string Safe(string? value) =>

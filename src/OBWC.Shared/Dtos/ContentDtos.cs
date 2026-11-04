@@ -57,13 +57,13 @@ public record SaveContentRequest
 
 public record ContactRequest
 {
-    [Required, MaxLength(100)]
+    [Required(ErrorMessage = "Enter your name."), MaxLength(100)]
     public string Name { get; init; } = "";
 
-    [Required, EmailAddress, MaxLength(256)]
+    [Required(ErrorMessage = "Enter your email."), EmailAddress(ErrorMessage = "Enter a valid email address."), MaxLength(256)]
     public string Email { get; init; } = "";
 
-    [Required, MaxLength(4000)]
+    [Required(ErrorMessage = "Enter a message."), MaxLength(4000)]
     public string Message { get; init; } = "";
 
     [MaxLength(200)]

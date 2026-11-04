@@ -5,9 +5,28 @@ public sealed class SuperAdminPromoter(
     IConfiguration configuration,
     ILogger<SuperAdminPromoter> logger)
 {
-    public async Task PromoteConfiguredAccountAsync()
+    public Task PromoteConfiguredAccountAsync() => SyncAsync();
+
+    public Task PromoteAsync(ApplicationUser user) => SyncAsync();
+
+    /// <summary>
+    /// SuperAdmin is the account named by Authorization:SuperAdminEmail, and no other account.
+    /// </summary>
+    public async Task SyncAsync()
     {
         var email = configuration["Authorization:SuperAdminEmail"]?.Trim();
+        var holders = await users.GetUsersInRoleAsync(RoleNames.SuperAdmin);
+        foreach (var holder in holders)
+        {
+            if (!string.IsNullOrEmpty(email) && string.Equals(holder.Email, email, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var removed = await users.RemoveFromRoleAsync(holder, RoleNames.SuperAdmin);
+            if (!removed.Succeeded)
+                logger.LogError("Could not remove SuperAdmin from {Email}: {Errors}", holder.Email, string.Join(' ', removed.Errors.Select(error => error.Description)));
+            else
+                logger.LogInformation("Removed SuperAdmin from {Email} because it is not Authorization:SuperAdminEmail.", holder.Email);
+        }
+
         if (string.IsNullOrEmpty(email))
             return;
 
@@ -17,15 +36,6 @@ public sealed class SuperAdminPromoter(
             logger.LogInformation("SuperAdmin email is configured, but that account has not registered yet.");
             return;
         }
-
-        await PromoteAsync(user);
-    }
-
-    public async Task PromoteAsync(ApplicationUser user)
-    {
-        var email = configuration["Authorization:SuperAdminEmail"]?.Trim();
-        if (string.IsNullOrEmpty(email) || !string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase))
-            return;
 
         if (!await users.IsInRoleAsync(user, RoleNames.SuperAdmin))
         {

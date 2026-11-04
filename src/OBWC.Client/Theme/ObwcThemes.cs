@@ -8,7 +8,7 @@ public static class ObwcThemes
     {
         PaletteLight = new PaletteLight
         {
-            Primary = "#7A8F4A",
+            Primary = "#4A5728",
             PrimaryContrastText = "#F7F4EC",
             Secondary = "#8B6B45",
             SecondaryContrastText = "#F7F4EC",

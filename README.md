@@ -63,7 +63,7 @@ dotnet user-secrets set "Smtp:Password" "..." --project src/OBWC.Api
 dotnet user-secrets set "Smtp:FromAddress" "club@example.com" --project src/OBWC.Api
 ```
 
-The JWT key must be at least 32 characters. User-secrets override `appsettings.Development.json`, so setting `Authorization:SuperAdminEmail` to Timothy's address replaces the SAMPLE admin on your machine.
+The JWT key must be at least 32 characters. User-secrets override `appsettings.Development.json`, so setting `Authorization:SuperAdminEmail` to Timothy's address replaces the SAMPLE admin on your machine. `dotnet publish` leaves `appsettings.Development.json` and `appsettings.Testing.json` out of the output. On each sign-in the API keeps SuperAdmin only on the configured email and removes it from any other account.
 
 In Development, if SMTP is empty, confirmation and reset links are written to the API log and listed at `/dev/mail` on the client (the API route is `GET /api/dev/mail` and returns 404 outside Development).
 

@@ -1,5 +1,5 @@
 :root {
-    --obwc-green: #7A8F4A;
+    --obwc-green: #4A5728;
     --obwc-tan: #C9B873;
     --obwc-wood: #8B6B45;
     --obwc-blue: #2F6DB5;
@@ -68,7 +68,7 @@ h1, h2, h3, .mud-typography-h4, .mud-typography-h5, .mud-typography-h6 {
 .terrain-stripe {
     height: 8px;
     background:
-        linear-gradient(90deg, #7A8F4A 0 28%, #C9B873 28% 46%, #8B6B45 46% 70%, #2F6DB5 70% 100%);
+        linear-gradient(90deg, #4A5728 0 28%, #C9B873 28% 46%, #8B6B45 46% 70%, #2F6DB5 70% 100%);
 }
 
 .club-mark {
@@ -282,7 +282,7 @@ h1, h2, h3, .mud-typography-h4, .mud-typography-h5, .mud-typography-h6 {
 }
 
 .loading-progress circle:last-child {
-    stroke: #7A8F4A;
+    stroke: #4A5728;
     stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * .8), 500%;
     transition: stroke-dasharray .05s ease-in-out;
 }

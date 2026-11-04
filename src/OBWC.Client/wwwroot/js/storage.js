@@ -2,6 +2,10 @@ window.obwcTheme = {
     set: (dark) => document.documentElement.classList.toggle("obwc-dark", !!dark)
 };
 
+window.obwcViewport = {
+    wide: () => window.matchMedia("(min-width: 960px)").matches
+};
+
 window.obwcStorage = {
     get: (key) => localStorage.getItem(key),
     set: (key, value) => localStorage.setItem(key, value),

@@ -125,6 +125,13 @@ public class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>, IDisposa
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
         var anonymous = await _api.Client.GetAsync("/api/users");
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        await _api.AddRolesAsync("player@obwc.test", RoleNames.SuperAdmin);
+        var stripped = await LoginAsync("player@obwc.test");
+        Assert.DoesNotContain(RoleNames.SuperAdmin, stripped.User.Roles);
+        Assert.Contains(RoleNames.Member, stripped.User.Roles);
+        var ownerAfter = await LoginAsync("owner@obwc.test");
+        Assert.Contains(RoleNames.SuperAdmin, ownerAfter.User.Roles);
     }
 
     private async Task<AuthResponse> LoginAsync(string email)

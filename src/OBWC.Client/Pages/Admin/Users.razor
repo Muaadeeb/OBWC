@@ -32,12 +32,12 @@ else
         <MudTh></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd>@context.User.DisplayName</MudTd>
-        <MudTd>@context.User.Email</MudTd>
-        <MudTd><MudCheckBox T="bool" @bind-Value="context.Member" Disabled="@context.Locked" /></MudTd>
-        <MudTd><MudCheckBox T="bool" @bind-Value="context.Admin" Disabled="@context.Locked" /></MudTd>
-        <MudTd><MudCheckBox T="bool" @bind-Value="context.Gm" Disabled="@context.Locked" /></MudTd>
-        <MudTd>
+        <MudTd DataLabel="Name">@context.User.DisplayName</MudTd>
+        <MudTd DataLabel="Email">@context.User.Email</MudTd>
+        <MudTd DataLabel="Member"><MudCheckBox T="bool" @bind-Value="context.Member" Disabled="@context.Locked" /></MudTd>
+        <MudTd DataLabel="Admin"><MudCheckBox T="bool" @bind-Value="context.Admin" Disabled="@context.Locked" /></MudTd>
+        <MudTd DataLabel="GM"><MudCheckBox T="bool" @bind-Value="context.Gm" Disabled="@context.Locked" /></MudTd>
+        <MudTd DataLabel="Save">
             @if (context.SuperAdmin)
             {
                 <MudChip T="string" Size="Size.Small" Color="Color.Primary">SuperAdmin</MudChip>
