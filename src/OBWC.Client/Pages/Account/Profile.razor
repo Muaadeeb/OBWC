@@ -13,23 +13,27 @@ else
 {
     <p>@_user.Email</p>
     <p>Roles: @string.Join(", ", _user.Roles)</p>
-    <MudTextField @bind-Value="_name" Label="Display name" />
-    <MudSelect T="MembershipType?" @bind-Value="_type" Label="Membership" Clearable="true">
-        <MudSelectItem T="MembershipType?" Value="@MembershipType.Adult">Adult</MudSelectItem>
-        <MudSelectItem T="MembershipType?" Value="@MembershipType.Student">Student, 22 and under</MudSelectItem>
-        <MudSelectItem T="MembershipType?" Value="@MembershipType.FriendOfObwc">Friend of OBWC</MudSelectItem>
-    </MudSelect>
-    <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save profile</MudButton>
-    <h2 class="mt-4">Change password</h2>
-    <MudTextField @bind-Value="_current" Label="Current password" InputType="InputType.Password" />
-    <MudTextField @bind-Value="_next" Label="New password" InputType="InputType.Password" />
-    <MudButton Class="mt-2" Variant="Variant.Outlined" OnClick="ChangePassword">Update password</MudButton>
+    <MudPaper Class="pa-4 account-card" Outlined="true">
+        <MudTextField @bind-Value="_name" Label="Display name" Variant="Variant.Outlined" />
+        <MudSelect T="MembershipType?" @bind-Value="_type" Label="Membership" Variant="Variant.Outlined" Clearable="true" Class="mt-3">
+            <MudSelectItem T="MembershipType?" Value="@MembershipType.Adult">Adult</MudSelectItem>
+            <MudSelectItem T="MembershipType?" Value="@MembershipType.Student">Student, 22 and under</MudSelectItem>
+            <MudSelectItem T="MembershipType?" Value="@MembershipType.FriendOfObwc">Friend of OBWC</MudSelectItem>
+        </MudSelect>
+        <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">Save profile</MudButton>
+        <h2 class="mt-4">Change password</h2>
+        <MudTextField @bind-Value="_current" Label="Current password" InputType="InputType.Password" Variant="Variant.Outlined" />
+        <MudTextField @bind-Value="_next" Label="New password" InputType="InputType.Password" Variant="Variant.Outlined" Class="mt-3"
+                      HelperText="8 or more characters, with upper and lower case, a number, and a symbol." />
+        <MudButton Class="mt-3" Variant="Variant.Outlined" Disabled="_busy" OnClick="ChangePassword">Update password</MudButton>
+    </MudPaper>
 }
 
 @code {
     private CurrentUserDto? _user;
     private string _name = "", _current = "", _next = "";
     private MembershipType? _type;
+    private bool _busy;
 
     protected override async Task OnInitializedAsync()
     {
@@ -40,14 +44,44 @@ else
 
     private async Task Save()
     {
-        var (user, error) = await Auth.UpdateProfileAsync(new UpdateProfileRequest { DisplayName = _name, MembershipType = _type });
-        if (error is not null) Snackbar.Add(error, Severity.Error);
-        else { _user = user; Snackbar.Add("Profile saved.", Severity.Success); }
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Enter the name other members should see.", Severity.Warning);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var (user, error) = await Auth.UpdateProfileAsync(new UpdateProfileRequest { DisplayName = _name.Trim(), MembershipType = _type });
+            if (error is not null) Snackbar.Add(error, Severity.Error);
+            else { _user = user; Snackbar.Add("Profile saved.", Severity.Success); }
+        }
+        finally { _busy = false; }
     }
 
     private async Task ChangePassword()
     {
-        var error = await Auth.ChangePasswordAsync(new ChangePasswordRequest { CurrentPassword = _current, NewPassword = _next });
-        Snackbar.Add(error ?? "Password updated.", error is null ? Severity.Success : Severity.Error);
+        if (string.IsNullOrWhiteSpace(_current))
+        {
+            Snackbar.Add("Enter your current password.", Severity.Warning);
+            return;
+        }
+        var passwordProblem = FormChecks.PasswordProblem(_next);
+        if (passwordProblem is not null)
+        {
+            Snackbar.Add(passwordProblem, Severity.Warning);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var error = await Auth.ChangePasswordAsync(new ChangePasswordRequest { CurrentPassword = _current, NewPassword = _next });
+            Snackbar.Add(error ?? "Password updated.", error is null ? Severity.Success : Severity.Error);
+            if (error is null)
+                _current = _next = "";
+        }
+        finally { _busy = false; }
     }
 }

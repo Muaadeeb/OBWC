@@ -49,6 +49,7 @@ Example `web.config` fragment (placeholders only):
 ```xml
 <aspNetCore processPath="dotnet" arguments=".\OBWC.Api.dll" stdoutLogEnabled="false">
   <environmentVariables>
+    <environmentVariable name="Database__Provider" value="SqlServer" />
     <environmentVariable name="ConnectionStrings__DefaultConnection" value="Server=YOUR_SQL_HOST;Database=OBWC;User Id=YOUR_SQL_USER;Password=YOUR_SQL_PASSWORD;TrustServerCertificate=True;Encrypt=True" />
     <environmentVariable name="Jwt__Key" value="REPLACE_WITH_A_LONG_RANDOM_KEY" />
     <environmentVariable name="Authorization__SuperAdminEmail" value="the-superadmin@email" />
@@ -66,6 +67,8 @@ Uploads (gallery, venue photos, constitution, budget) are stored under `App_Data
 On startup, with `App__ApplyMigrations=true`, the API applies EF Core migrations and seeds club facts if those rows are missing.
 
 ## 4. Publish
+
+Publish only after the SQL Server migrations are the ones compiled into the API (section 1). `appsettings.Development.json` and `appsettings.Testing.json` are not copied into the publish folder. Production uses `appsettings.Production.json` (SQL Server and a placeholder connection string) plus the environment variables above. The API will not start while the connection string or `Jwt:Key` is still a placeholder, and it rejects the development-only JWT key outside Development.
 
 From the repository root, on a machine with the .NET 10 SDK:
 

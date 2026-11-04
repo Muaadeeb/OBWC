@@ -32,6 +32,8 @@
   <ItemGroup>
     <Compile Remove="Data/SqlServerMigrations/**" />
     <None Include="Data/SqlServerMigrations/**" />
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+    <Content Update="appsettings.Testing.json" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
 </Project>

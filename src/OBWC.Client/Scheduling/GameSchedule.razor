@@ -49,8 +49,8 @@ else
                 <MudText Typo="Typo.subtitle1" Class="mb-2">Schedule a game</MudText>
                 <MudGrid>
                     <MudItem xs="12" md="3"><MudDatePicker @bind-Date="_newDate" Label="First date" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12" md="2"><MudTimePicker @bind-Time="_newTime" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12" md="2"><MudTimePicker @bind-Time="_newEnd" Label="End (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" md="2"><MudTimePicker @bind-Time="_newTime" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm="true" /></MudItem>
+                    <MudItem xs="12" md="2"><MudTimePicker @bind-Time="_newEnd" Label="End (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm="true" /></MudItem>
                     <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="_weeks" Label="Weeks" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="26" HelperText="1 = single night" /></MudItem>
                     <MudItem xs="12" md="3"><MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" md="4"><MudTextField @bind-Value="_venue" Label="Venue" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>

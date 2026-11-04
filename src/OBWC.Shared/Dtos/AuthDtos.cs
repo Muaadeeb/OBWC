@@ -4,13 +4,13 @@ namespace OBWC.Shared.Dtos;
 
 public record RegisterRequest
 {
-    [Required, EmailAddress, MaxLength(256)]
+    [Required(ErrorMessage = "Enter your email."), EmailAddress(ErrorMessage = "Enter a valid email address."), MaxLength(256)]
     public string Email { get; init; } = "";
 
-    [Required, MinLength(8), MaxLength(128)]
+    [Required(ErrorMessage = "Enter a password."), MinLength(8, ErrorMessage = "Use at least 8 characters."), MaxLength(128)]
     public string Password { get; init; } = "";
 
-    [Required, MaxLength(100)]
+    [Required(ErrorMessage = "Enter the name other members should see."), MaxLength(100)]
     public string DisplayName { get; init; } = "";
 
     public MembershipType? MembershipType { get; init; }
@@ -18,10 +18,10 @@ public record RegisterRequest
 
 public record LoginRequest
 {
-    [Required, EmailAddress, MaxLength(256)]
+    [Required(ErrorMessage = "Enter your email."), EmailAddress(ErrorMessage = "Enter a valid email address."), MaxLength(256)]
     public string Email { get; init; } = "";
 
-    [Required, MaxLength(128)]
+    [Required(ErrorMessage = "Enter your password."), MaxLength(128)]
     public string Password { get; init; } = "";
 }
 
@@ -42,7 +42,7 @@ public record ConfirmEmailRequest
 
 public record ForgotPasswordRequest
 {
-    [Required, EmailAddress, MaxLength(256)]
+    [Required(ErrorMessage = "Enter your email."), EmailAddress(ErrorMessage = "Enter a valid email address."), MaxLength(256)]
     public string Email { get; init; } = "";
 }
 
@@ -54,22 +54,22 @@ public record ResetPasswordRequest
     [Required]
     public string Token { get; init; } = "";
 
-    [Required, MinLength(8), MaxLength(128)]
+    [Required(ErrorMessage = "Enter a new password."), MinLength(8, ErrorMessage = "Use at least 8 characters."), MaxLength(128)]
     public string NewPassword { get; init; } = "";
 }
 
 public record ChangePasswordRequest
 {
-    [Required]
+    [Required(ErrorMessage = "Enter your current password.")]
     public string CurrentPassword { get; init; } = "";
 
-    [Required, MinLength(8), MaxLength(128)]
+    [Required(ErrorMessage = "Enter a new password."), MinLength(8, ErrorMessage = "Use at least 8 characters."), MaxLength(128)]
     public string NewPassword { get; init; } = "";
 }
 
 public record UpdateProfileRequest
 {
-    [Required, MaxLength(100)]
+    [Required(ErrorMessage = "Enter the name other members should see."), MaxLength(100)]
     public string DisplayName { get; init; } = "";
 
     public MembershipType? MembershipType { get; init; }

@@ -36,16 +36,60 @@ public static class ApiErrors
         try
         {
             using var document = JsonDocument.Parse(text);
-            if (document.RootElement.TryGetProperty("detail", out var detail) && detail.ValueKind == JsonValueKind.String)
-                return detail.GetString() ?? "The request failed.";
-            if (document.RootElement.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
-                return title.GetString() ?? "The request failed.";
+            var root = document.RootElement;
+            if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
+            {
+                var messages = new List<string>();
+                foreach (var property in errors.EnumerateObject())
+                {
+                    if (property.Value.ValueKind != JsonValueKind.Array)
+                        continue;
+                    foreach (var item in property.Value.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } message && !messages.Contains(message))
+                            messages.Add(message);
+                    }
+                }
+
+                if (messages.Count > 0)
+                    return string.Join(' ', messages);
+            }
+
+            if (root.TryGetProperty("detail", out var detail) && detail.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(detail.GetString()))
+                return detail.GetString()!;
+            if (root.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(title.GetString()))
+                return title.GetString()!;
         }
         catch (JsonException)
         {
         }
 
         return text;
+    }
+}
+
+public static class FormChecks
+{
+    public static bool IsEmail(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+        var trimmed = value.Trim();
+        var at = trimmed.IndexOf('@');
+        return at > 0 && at < trimmed.Length - 1 && trimmed[(at + 1)..].Contains('.') && !trimmed.Contains(' ');
+    }
+
+    public static string? PasswordProblem(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length < 8)
+            return "Use at least 8 characters.";
+        var hasUpper = value.Any(char.IsUpper);
+        var hasLower = value.Any(char.IsLower);
+        var hasDigit = value.Any(char.IsDigit);
+        var hasSymbol = value.Any(ch => !char.IsLetterOrDigit(ch));
+        if (!hasUpper || !hasLower || !hasDigit || !hasSymbol)
+            return "Include an upper-case letter, a lower-case letter, a number, and a symbol.";
+        return null;
     }
 }
 
@@ -346,6 +390,9 @@ public sealed class AuthApi(HttpClient http, TokenStore tokens, ObwcAuthenticati
 
     public async Task<CurrentUserDto?> MeAsync()
     {
+        var token = await tokens.GetAccessTokenAsync(forceRefresh: false);
+        if (string.IsNullOrEmpty(token))
+            return null;
         var response = await http.GetAsync("api/auth/me");
         if (!response.IsSuccessStatusCode)
             return null;

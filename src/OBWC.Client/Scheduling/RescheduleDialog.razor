@@ -12,10 +12,10 @@
                 <MudDatePicker @bind-Date="_date" Label="New date" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" />
             </MudItem>
             <MudItem xs="12" sm="3">
-                <MudTimePicker @bind-Time="_startTime" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" />
+                <MudTimePicker @bind-Time="_startTime" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" AmPm="true" />
             </MudItem>
             <MudItem xs="12" sm="3">
-                <MudTimePicker @bind-Time="_endTime" Label="End (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" Clearable="true" />
+                <MudTimePicker @bind-Time="_endTime" Label="End (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" Clearable="true" AmPm="true" />
             </MudItem>
         </MudGrid>
         @if (HasSeries)

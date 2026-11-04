@@ -2,30 +2,69 @@
 @inject AuthApi Auth
 
 <PageTitle>Create an account · OBWC</PageTitle>
-<MudPaper Class="pa-4" Outlined="true" Style="max-width:32rem">
+<MudPaper Class="pa-4 account-card" Outlined="true">
     <h1>Create an account</h1>
-    <p>Password: 8+ characters with upper and lower case, a number, and a symbol. Confirm the email before you sign in.</p>
-    <MudTextField @bind-Value="_name" Label="Name to show other members" />
-    <MudTextField @bind-Value="_email" Label="Email" />
-    <MudTextField @bind-Value="_password" Label="Password" InputType="InputType.Password" />
-    <MudSelect T="MembershipType?" @bind-Value="_type" Label="Membership" Clearable="true">
+    <p class="lede">Confirm the email before you sign in. In local development the confirmation link is on Dev mail.</p>
+    <MudTextField @bind-Value="_name" Label="Name to show other members" Variant="Variant.Outlined" />
+    <MudTextField @bind-Value="_email" Label="Email" InputType="InputType.Email" Variant="Variant.Outlined" Class="mt-3" />
+    <MudTextField @bind-Value="_password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Class="mt-3"
+                  HelperText="8 or more characters, with upper and lower case, a number, and a symbol." />
+    <MudSelect T="MembershipType?" @bind-Value="_type" Label="Membership" Variant="Variant.Outlined" Clearable="true" Class="mt-3">
         <MudSelectItem T="MembershipType?" Value="@MembershipType.Adult">Adult — $25</MudSelectItem>
         <MudSelectItem T="MembershipType?" Value="@MembershipType.Student">Student, 22 and under — $10</MudSelectItem>
         <MudSelectItem T="MembershipType?" Value="@MembershipType.FriendOfObwc">Friend of OBWC — free</MudSelectItem>
     </MudSelect>
-    @if (!string.IsNullOrEmpty(_message)) { <MudAlert Severity="@(_error ? Severity.Error : Severity.Success)" Class="mt-2">@_message</MudAlert> }
-    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit">Register</MudButton>
+    @if (!string.IsNullOrEmpty(_message)) { <MudAlert Severity="@(_error ? Severity.Error : Severity.Success)" Class="mt-3">@_message</MudAlert> }
+    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Submit">Register</MudButton>
 </MudPaper>
 
 @code {
     private string _name = "", _email = "", _password = "", _message = "";
     private bool _error;
+    private bool _busy;
     private MembershipType? _type;
 
     private async Task Submit()
     {
-        var error = await Auth.RegisterAsync(new RegisterRequest { DisplayName = _name, Email = _email, Password = _password, MembershipType = _type });
-        _error = error is not null;
-        _message = error ?? "Account created. Check your email to confirm it. In local development, open Dev mail in the menu (or the API log) for the confirmation link.";
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Fail("Enter the name other members should see.");
+            return;
+        }
+        if (!FormChecks.IsEmail(_email))
+        {
+            Fail("Enter a valid email address.");
+            return;
+        }
+        var passwordProblem = FormChecks.PasswordProblem(_password);
+        if (passwordProblem is not null)
+        {
+            Fail(passwordProblem);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var error = await Auth.RegisterAsync(new RegisterRequest
+            {
+                DisplayName = _name.Trim(),
+                Email = _email.Trim(),
+                Password = _password,
+                MembershipType = _type
+            });
+            _error = error is not null;
+            _message = error ?? "Account created. Check your email to confirm it. In local development, open Dev mail in the menu (or the API log) for the confirmation link.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Fail(string message)
+    {
+        _error = true;
+        _message = message;
     }
 }

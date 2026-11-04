@@ -28,12 +28,23 @@
     private string? _lead;
     private string? _error;
 
+    private static string? FirstSentence(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return null;
+        var paragraph = body.Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+        if (string.IsNullOrEmpty(paragraph))
+            return null;
+        var end = paragraph.IndexOf(". ", StringComparison.Ordinal);
+        return end > 0 ? paragraph[..(end + 1)] : paragraph;
+    }
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             var about = await Club.GetContentAsync(ContentKeys.About);
-            _lead = about?.Body.Split("\n\n", StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            _lead = FirstSentence(about?.Body);
         }
         catch (ClubApiException)
         {
