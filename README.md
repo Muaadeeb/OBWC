@@ -1,6 +1,6 @@
 # Omaha Beach Wargaming Club
 
-Club website: a standalone Blazor WebAssembly client, an ASP.NET Core Web API, and a database. The default database is a local SQLite file so a fresh clone starts with no manual database steps. SQL Server stays available for SmarterASP.NET.
+Club website: a standalone Blazor WebAssembly client, an ASP.NET Core Web API, and a database. Local development and tests use a SQLite file so a fresh clone starts with no manual database steps. Production, including SmarterASP.NET, uses SQL Server.
 
 The public site covers the pages from the club's page list (About, Next Event, Game Schedule, Gallery, rule sets, stores, venues, Nuke-Con, area groups, conventions, documents, and contact). Members schedule games and read member documents. A GM maintains venues and photos on games they scheduled. Admins maintain content and roles.
 
@@ -33,18 +33,18 @@ A GM can change only events they created, and can upload photos only on those ev
 
 ## Database
 
-`Database:Provider` is `Sqlite` or `SqlServer`.
+`Database:Provider` is `Sqlite` or `SqlServer`. Production ignores that setting and always uses SQL Server.
 
 | Provider | When | Connection |
 | --- | --- | --- |
-| `Sqlite` | Default. Local development and tests. | `Data Source=App_Data/obwc.db` |
-| `SqlServer` | SmarterASP.NET, or any time you want SQL Server. | Set `ConnectionStrings:DefaultConnection`. Do not commit the password. |
+| `Sqlite` | Local development and tests. | `Data Source=App_Data/obwc.db` |
+| `SqlServer` | Production, including SmarterASP.NET. Also any time `Database:Provider` is `SqlServer`. | `ConnectionStrings:DefaultConnection` from the environment or from an uncommitted `appsettings.Production.json`. |
 
-On startup outside the test host, `App:ApplyMigrations` (default `true`) creates the database and applies EF Core migrations. In Development that is the SQLite file under `App_Data/`, which is gitignored. You do not run `dotnet ef database update` by hand.
+On startup outside the test host, `App:ApplyMigrations` (default `true`) creates the database and applies the migrations for the active provider. In Development that is the SQLite file under `App_Data/`, which is gitignored.
 
-SQLite migrations live in `src/OBWC.Api/Data/Migrations` and already include ASP.NET Identity schema version 3 and `ClubContentMaintenance`. The SQL Server migrations, including the schema version 3 fix and the same content migration, are kept in `src/OBWC.Api/Data/SqlServerMigrations` and are not compiled. See that folder's README to compile them again when `Database:Provider` is `SqlServer`.
+SQLite migrations live in `src/OBWC.Api/Data/Migrations`. SQL Server migrations live in `src/OBWC.Api/Data/SqlServerMigrations`. Both are compiled. The API applies only the set that matches the provider. An idempotent script for the SQL Server set is in `deploy/sql/obwc-sqlserver.sql`.
 
-`appsettings.Production.json` selects SQL Server and a placeholder connection string. The API will not start in Production until that placeholder and `Jwt:Key` are replaced.
+`appsettings.Production.example.json` shows the production shape with placeholders. The real `appsettings.Production.json` is gitignored. The API will not start in Production while the connection string or `Jwt:Key` is still a placeholder, and it rejects the development-only JWT key outside Development.
 
 ## Configure secrets
 
@@ -63,11 +63,11 @@ dotnet user-secrets set "Smtp:Password" "..." --project src/OBWC.Api
 dotnet user-secrets set "Smtp:FromAddress" "club@example.com" --project src/OBWC.Api
 ```
 
-The JWT key must be at least 32 characters. `appsettings.Development.json` sets `Authorization:SuperAdminEmail` to the sample admin, which overrides the Timothy address while the environment is Development. User-secrets override that file. `dotnet publish` leaves `appsettings.Development.json` and `appsettings.Testing.json` out of the output, so a published site uses `timothyingledue@gmail.com` unless `Authorization__SuperAdminEmail` replaces it. On each sign-in the API keeps SuperAdmin only on the configured email and removes it from any other account.
+The JWT key must be at least 32 characters. `appsettings.Development.json` sets `Authorization:SuperAdminEmail` to the sample admin, which overrides the Timothy address while the environment is Development. User-secrets override that file. `dotnet publish` leaves `appsettings.Development.json`, `appsettings.Testing.json`, and `appsettings.Production.example.json` out of the output, and it does not copy `appsettings.Production.json`. A published site uses `timothyingledue@gmail.com` unless `Authorization__SuperAdminEmail` replaces it. On each sign-in the API keeps SuperAdmin only on the configured email and removes it from any other account.
 
 In Development, if SMTP is empty, confirmation and reset links are written to the API log and listed at `/dev/mail` on the client (the API route is `GET /api/dev/mail` and returns 404 outside Development).
 
-Set the client API address in `src/OBWC.Client/wwwroot/appsettings.json` (`ApiBaseUrl`). That file is public. Do not put secrets in it.
+Set the client API address in `src/OBWC.Client/wwwroot/appsettings.json` (`ApiBaseUrl`) for local development. The published client loads `wwwroot/appsettings.Production.json`, which points at `https://api.omahabeachwc.com`. Both files are public. Do not put secrets in them.
 
 ## Run
 
@@ -120,4 +120,4 @@ SAMPLE users and SAMPLE events are added only when the environment is Developmen
 
 ## Deploy
 
-See [docs/DEPLOY.md](docs/DEPLOY.md) for a manual publish to SmarterASP.NET as two sites, using SQL Server.
+See [docs/DEPLOY-SMARTERASP.md](docs/DEPLOY-SMARTERASP.md) for the SmarterASP.NET publish: SQL Server schema, the connection string, and the API and Blazor client sites for omahabeachwc.com.

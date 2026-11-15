@@ -2,7 +2,7 @@
 
 #nullable disable
 
-namespace OBWC.Api.Data.Migrations
+namespace OBWC.Api.Data.SqlServerMigrations
 {
     /// <inheritdoc />
     public partial class IdentitySchemaVersion3 : Migration

@@ -9,7 +9,7 @@ using OBWC.Api.Data;
 
 #nullable disable
 
-namespace OBWC.Api.Data.Migrations
+namespace OBWC.Api.Data.SqlServerMigrations
 {
     [DbContext(typeof(ApplicationDbContext))]
     [Migration("20261104064641_IdentitySchemaVersion3")]

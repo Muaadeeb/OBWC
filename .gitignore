@@ -435,3 +435,7 @@ FodyWeavers.xsd
 # Local overrides and uploaded club files
 appsettings.*.local.json
 **/App_Data/
+
+# Live API settings. Copy src/OBWC.Api/appsettings.Production.example.json on the server.
+# The filled-in file holds the SQL password and JWT key. Do not commit it.
+src/OBWC.Api/appsettings.Production.json

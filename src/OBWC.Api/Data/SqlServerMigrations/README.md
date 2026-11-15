@@ -1,19 +1,26 @@
-# Archived SQL Server migrations
+# SQL Server migrations
 
-These files are the EF Core migrations generated for **SQL Server** (including the Identity schema version 3 fix and `ClubContentMaintenance`). They are not compiled. The app applies the SQLite migrations in `Data/Migrations` while `Database:Provider` is `Sqlite`.
+These files are the EF Core migrations for **SQL Server**. They are compiled next to the SQLite migrations in `Data/Migrations`. `ProviderMigrationsAssembly` shows each provider only its own namespace, so the two histories are never applied to the same database.
 
-`ClubContentMaintenance` matches the SQLite migration of the same name. It adds officer contact and photo columns, area-group game focus and contact, convention start and end dates (and drops the old free-text `WhenText` column), document visibility (existing rows become `MembersOnly`), and the `EventPhotos` table. Do not compile this folder and `Data/Migrations` at the same time.
+The SQL Server history is:
 
-To run against SQL Server again:
+1. `InitialCreate` — the model as first generated for SQL Server.
+2. `IdentitySchemaVersion3` — widens nothing; it shortens the Identity token and login key columns to 128 characters and recreates the primary keys, which SQL Server will not alter in place. The API runs Identity schema version 3.
+3. `ClubContentMaintenance` — officer contact and photo, area-group game focus and contact, convention start and end dates (drops `WhenText`), document visibility (existing rows become `MembersOnly`), and `EventPhotos`.
 
-1. Set `Database:Provider` to `SqlServer`.
-2. Set `ConnectionStrings:DefaultConnection` to the SQL Server connection string (user-secrets or environment variables — do not commit it).
-3. Stop compiling the SQLite migrations and compile this folder instead. In `OBWC.Api.csproj`, remove the `Compile Remove` for `Data/SqlServerMigrations/**` and add:
+`dotnet ef` follows `Database__Provider`. From the repository root, after `dotnet tool restore`:
 
-```xml
-<Compile Remove="Data/Migrations/**" />
+```bash
+# SQLite (local default)
+dotnet ef migrations add Name --project src/OBWC.Api --output-dir Data/Migrations
+
+# SQL Server
+Database__Provider=SqlServer dotnet ef migrations add Name --project src/OBWC.Api --output-dir Data/SqlServerMigrations
+Database__Provider=SqlServer dotnet ef migrations script --idempotent --project src/OBWC.Api --output deploy/sql/obwc-sqlserver.sql
 ```
 
-4. The design-time factory follows `Database__Provider`. With the SQL Server migrations compiled, `dotnet ef database update --project src/OBWC.Api` applies this set.
+Keep the `SET QUOTED_IDENTIFIER ON` batch at the top of `deploy/sql/obwc-sqlserver.sql`. Filtered indexes fail without it. The command above replaces the file, so put that batch back after regenerating.
 
-Do not compile both folders at once. Both contain an `ApplicationDbContextModelSnapshot`.
+On Windows PowerShell, set the variable first: `$env:Database__Provider = "SqlServer"`.
+
+Apply the script in `deploy/sql/obwc-sqlserver.sql`, or run `dotnet ef database update` with `ConnectionStrings__DefaultConnection` set in the environment. Do not put the password in the repo.

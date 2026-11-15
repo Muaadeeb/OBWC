@@ -15,7 +15,7 @@ builder.Services.Configure<AppOptions>(builder.Configuration.GetSection(AppOptio
 builder.Services.Configure<UploadOptions>(builder.Configuration.GetSection(UploadOptions.Section));
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    DatabaseConfiguration.Configure(options, builder.Configuration, builder.Environment.ContentRootPath));
+    DatabaseConfiguration.Configure(options, builder.Configuration, builder.Environment.ContentRootPath, builder.Environment));
 
 builder.Services
     .AddIdentityCore<ApplicationUser>(options =>
@@ -188,14 +188,22 @@ static void ValidateConfiguration(WebApplicationBuilder builder)
             "Jwt:Key is the development-only key. Set a unique key with the Jwt__Key environment variable before running outside Development.");
     }
 
-    var provider = builder.Configuration["Database:Provider"];
+    var provider = DatabaseConfiguration.GetProvider(builder.Configuration, builder.Environment);
     var connection = builder.Configuration.GetConnectionString("DefaultConnection");
-    var sqlServer = string.Equals(provider, DatabaseConfiguration.SqlServerProvider, StringComparison.OrdinalIgnoreCase);
-    if (string.IsNullOrWhiteSpace(connection)
-        || connection.Contains("YOUR_SQL", StringComparison.OrdinalIgnoreCase)
-        || (sqlServer && connection.Contains("Data Source=", StringComparison.OrdinalIgnoreCase)))
+    if (provider == DatabaseConfiguration.SqlServerProvider)
+    {
+        if (!DatabaseConfiguration.IsUsableSqlServerConnection(connection))
+        {
+            throw new InvalidOperationException(
+                "SQL Server requires ConnectionStrings:DefaultConnection. Set ConnectionStrings__DefaultConnection, or copy appsettings.Production.example.json to appsettings.Production.json on the server and fill it in. Do not commit that file. A SmarterASP string such as Data Source=YOUR_HOST;Initial Catalog=YOUR_DATABASE;User Id=YOUR_USER;Password=YOUR_PASSWORD is accepted.");
+        }
+
+        return;
+    }
+
+    if (string.IsNullOrWhiteSpace(connection))
     {
         throw new InvalidOperationException(
-            "ConnectionStrings:DefaultConnection is still a placeholder. For SQLite use a file path such as Data Source=App_Data/obwc.db. For SQL Server set Database:Provider to SqlServer and set the connection with user-secrets or ConnectionStrings__DefaultConnection.");
+            "ConnectionStrings:DefaultConnection is required. For local SQLite use a file path such as Data Source=App_Data/obwc.db.");
     }
 }

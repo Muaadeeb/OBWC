@@ -23,9 +23,12 @@ public class SeedTests(ApiFactory factory) : IClassFixture<ApiFactory>, IDisposa
         Assert.Contains("\"MaxGalleryPhotos\": 100", settings, StringComparison.Ordinal);
         Assert.Contains("\"Provider\": \"Sqlite\"", settings, StringComparison.Ordinal);
         Assert.DoesNotContain("Password=", settings, StringComparison.OrdinalIgnoreCase);
-        var production = File.ReadAllText(Path.Combine(RepoRoot(), "src", "OBWC.Api", "appsettings.Production.json"));
-        Assert.Contains("YOUR_SQL_PASSWORD", production, StringComparison.Ordinal);
-        Assert.Contains("SqlServer", production, StringComparison.Ordinal);
+        var example = File.ReadAllText(Path.Combine(RepoRoot(), "src", "OBWC.Api", "appsettings.Production.example.json"));
+        Assert.Contains("YOUR_SQL_PASSWORD", example, StringComparison.Ordinal);
+        Assert.Contains("SqlServer", example, StringComparison.Ordinal);
+        Assert.Contains("omahabeachwc.com", example, StringComparison.Ordinal);
+        var gitignore = File.ReadAllText(Path.Combine(RepoRoot(), ".gitignore"));
+        Assert.Contains("src/OBWC.Api/appsettings.Production.json", gitignore, StringComparison.Ordinal);
     }
 
     [Fact]

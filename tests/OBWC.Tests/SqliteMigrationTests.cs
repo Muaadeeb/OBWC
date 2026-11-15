@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using OBWC.Api.Data;
 
@@ -11,18 +12,24 @@ public class SqliteMigrationTests
     public async Task Fresh_sqlite_file_migrates_without_manual_steps()
     {
         var path = Path.Combine(Path.GetTempPath(), $"obwc-migrate-{Guid.NewGuid():N}.db");
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Database:Provider"] = DatabaseConfiguration.SqliteProvider,
+                ["ConnectionStrings:DefaultConnection"] = $"Data Source={path};Pooling=False"
+            })
+            .Build();
         var services = new ServiceCollection();
         services.AddEntityFrameworkSqlite();
         services.Configure<IdentityOptions>(options => options.Stores.SchemaVersion = IdentitySchemaVersions.Version3);
         var provider = services.BuildServiceProvider();
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseSqlite($"Data Source={path};Pooling=False")
-            .UseApplicationServiceProvider(provider)
-            .Options;
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
+        DatabaseConfiguration.Configure(options, configuration, Path.GetTempPath());
+        options.UseApplicationServiceProvider(provider);
 
         try
         {
-            await using var db = new ApplicationDbContext(options);
+            await using var db = new ApplicationDbContext(options.Options);
             await db.Database.MigrateAsync();
 
             await using var connection = db.Database.GetDbConnection();
@@ -32,9 +39,10 @@ public class SqliteMigrationTests
             var table = await command.ExecuteScalarAsync();
             Assert.Equal("AspNetUserPasskeys", table);
 
-            command.CommandText = "SELECT COUNT(*) FROM \"__EFMigrationsHistory\"";
-            var migrations = Convert.ToInt32(await command.ExecuteScalarAsync());
-            Assert.True(migrations >= 1);
+            var applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
+            Assert.Contains(applied, id => id.Contains("InitialSqlite", StringComparison.Ordinal));
+            Assert.DoesNotContain(applied, id => id.Contains("InitialCreate", StringComparison.Ordinal));
+            Assert.DoesNotContain(applied, id => id.Contains("IdentitySchemaVersion3", StringComparison.Ordinal));
         }
         finally
         {
