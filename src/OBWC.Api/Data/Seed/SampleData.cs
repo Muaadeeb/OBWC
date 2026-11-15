@@ -8,8 +8,10 @@ public static class SampleData
 {
     public const string MemberEmail = "sample.member@obwc.local";
     public const string AdminEmail = "sample.admin@obwc.local";
+    public const string GuestEmail = "sample.guest@obwc.local";
     public const string MemberName = "SAMPLE Member";
     public const string AdminName = "SAMPLE Admin";
+    public const string GuestName = "SAMPLE Guest";
 
     public static async Task SeedAsync(IServiceProvider provider, CancellationToken cancellationToken)
     {
@@ -21,6 +23,7 @@ public static class SampleData
         var users = provider.GetRequiredService<UserManager<ApplicationUser>>();
         var member = await EnsureUserAsync(users, MemberEmail, MemberName, password, MembershipType.Adult);
         var admin = await EnsureUserAsync(users, AdminEmail, AdminName, password, MembershipType.Adult);
+        await EnsureUserAsync(users, GuestEmail, GuestName, password, membership: null);
         if (member is null)
             return;
 
@@ -78,7 +81,7 @@ public static class SampleData
         string email,
         string displayName,
         string password,
-        MembershipType membership)
+        MembershipType? membership)
     {
         var existing = await users.FindByEmailAsync(email);
         if (existing is not null)

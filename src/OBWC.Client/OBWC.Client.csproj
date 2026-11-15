@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <!-- The loader imports ./dotnet.js. A fingerprinted name 404s on the hosted site and the spinner never finishes. -->
+    <WasmFingerprintDotnetJs>false</WasmFingerprintDotnetJs>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <RootNamespace>OBWC.Client</RootNamespace>
   </PropertyGroup>

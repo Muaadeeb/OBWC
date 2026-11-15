@@ -24,7 +24,7 @@ public sealed class ApiTest : IDisposable
 
     public EmailOutbox Outbox => Factory.Services.GetRequiredService<EmailOutbox>();
 
-    public async Task<AuthResponse> RegisterAndLoginAsync(string email, string displayName, MembershipType? membership = null)
+    public async Task<AuthResponse> RegisterAndLoginAsync(string email, string displayName, MembershipType? membership = MembershipType.Adult)
     {
         var register = await Client.PostAsJsonAsync("/api/auth/register", new RegisterRequest
         {

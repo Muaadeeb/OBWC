@@ -6,11 +6,6 @@
         "Path": "src\\OBWC.Api\\OBWC.Api.csproj",
         "Action": "Start",
         "DebugTarget": "http"
-      },
-      {
-        "Path": "src\\OBWC.Client\\OBWC.Client.csproj",
-        "Action": "Start",
-        "DebugTarget": "http"
       }
     ]
   }

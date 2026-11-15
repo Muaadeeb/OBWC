@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>OBWC.Api</RootNamespace>
+    <AspNetCoreHostingModel>OutOfProcess</AspNetCoreHostingModel>
     <UserSecretsId>a7e3c1d4-6b28-4f9a-8c55-0e1d2b3a4f60</UserSecretsId>
   </PropertyGroup>
 
@@ -22,7 +23,12 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.14" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OBWC.Client\OBWC.Client.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -30,6 +36,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="logs\readme.txt" CopyToPublishDirectory="PreserveNewest" />
     <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
     <Content Update="appsettings.Testing.json" CopyToPublishDirectory="Never" />
     <Content Update="appsettings.Production.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />

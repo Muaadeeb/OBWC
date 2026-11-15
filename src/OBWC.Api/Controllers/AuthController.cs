@@ -8,8 +8,20 @@ public class AuthController(
     IClubMailer mail,
     SuperAdminPromoter promoter,
     ScheduleService schedule,
-    IOptions<AppOptions> appOptions) : ClubApiController
+    IOptions<AppOptions> appOptions,
+    IHostEnvironment environment) : ClubApiController
 {
+    private const string CheckEmailMessage =
+        "Account created. Check your email to confirm it before you sign in.";
+
+    private bool CanSendMail =>
+        mail.IsConfigured || environment.IsDevelopment() || environment.IsEnvironment("Testing");
+
+    private ActionResult MailNotReady() =>
+        Problem(
+            detail: "The site cannot send the confirmation email yet. Try again later.",
+            statusCode: StatusCodes.Status503ServiceUnavailable,
+            title: "Email is not configured");
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<ActionResult<MessageResponse>> Register(RegisterRequest request, CancellationToken cancellationToken)
@@ -18,6 +30,8 @@ public class AuthController(
         var displayName = request.DisplayName.Trim();
         if (displayName.Length == 0)
             return Bad("Enter the name you want other members to see.");
+        if (!CanSendMail)
+            return MailNotReady();
 
         var user = new ApplicationUser
         {
@@ -30,17 +44,28 @@ public class AuthController(
         if (!created.Succeeded)
             return IdentityProblem(created);
 
-        var member = await users.AddToRoleAsync(user, RoleNames.Member);
-        if (!member.Succeeded)
-            return IdentityProblem(member);
+        // A membership choice is a club member. A blank choice is a guest account and stays on the users page.
+        if (request.MembershipType is not null)
+        {
+            var member = await users.AddToRoleAsync(user, RoleNames.Member);
+            if (!member.Succeeded)
+                return IdentityProblem(member);
+        }
 
         await promoter.PromoteAsync(user);
-        await schedule.SeedMemberOnUpcomingSessionsAsync(user.Id, cancellationToken);
-        await SendConfirmationAsync(user);
-        return Accepted(new MessageResponse
+        if (request.MembershipType is not null || await users.IsInRoleAsync(user, RoleNames.SuperAdmin))
+            await schedule.SeedMemberOnUpcomingSessionsAsync(user.Id, cancellationToken);
+        try
         {
-            Message = "Account created. Check your email to confirm it before you sign in. In Development, when SMTP is not configured, the confirmation link is in the API log and on the Dev mail page."
-        });
+            await SendConfirmationAsync(user);
+        }
+        catch (MailNotConfiguredException)
+        {
+            await users.DeleteAsync(user);
+            return MailNotReady();
+        }
+
+        return Accepted(new MessageResponse { Message = CheckEmailMessage });
     }
 
     [HttpPost("confirm-email")]
@@ -56,7 +81,10 @@ public class AuthController(
             return IdentityProblem(result);
 
         await promoter.PromoteAsync(user);
-        await schedule.SeedMemberOnUpcomingSessionsAsync(user.Id);
+        if (await users.IsInRoleAsync(user, RoleNames.Member)
+            || await users.IsInRoleAsync(user, RoleNames.Admin)
+            || await users.IsInRoleAsync(user, RoleNames.SuperAdmin))
+            await schedule.SeedMemberOnUpcomingSessionsAsync(user.Id);
         return NoContent();
     }
 
@@ -64,6 +92,9 @@ public class AuthController(
     [AllowAnonymous]
     public async Task<ActionResult<MessageResponse>> ResendConfirmation(ForgotPasswordRequest request)
     {
+        if (!CanSendMail)
+            return MailNotReady();
+
         var user = await users.FindByEmailAsync(request.Email.Trim());
         if (user is not null && !user.EmailConfirmed)
             await SendConfirmationAsync(user);
@@ -119,6 +150,9 @@ public class AuthController(
     [AllowAnonymous]
     public async Task<ActionResult<MessageResponse>> ForgotPassword(ForgotPasswordRequest request)
     {
+        if (!CanSendMail)
+            return MailNotReady();
+
         var user = await users.FindByEmailAsync(request.Email.Trim());
         if (user is not null)
         {

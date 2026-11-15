@@ -2,7 +2,7 @@ namespace OBWC.Api.Controllers;
 
 [ApiController]
 [Route("api/users")]
-public class UsersController(UserManager<ApplicationUser> users) : ClubApiController
+public class UsersController(UserManager<ApplicationUser> users, ApplicationDbContext db) : ClubApiController
 {
     [HttpGet]
     [Authorize(Policy = PolicyNames.Admin)]
@@ -66,9 +66,6 @@ public class UsersController(UserManager<ApplicationUser> users) : ClubApiContro
         if (targetIsSuperAdmin && !User.IsInRole(RoleNames.SuperAdmin))
             return Forbidden("Only a SuperAdmin can change roles on the configured SuperAdmin account.");
 
-        if (!request.Member && !request.Admin && !targetIsSuperAdmin)
-            return Bad("Assign the Member or Admin role. Guest is anyone who is not signed in.");
-
         if (request.Gm && !request.Member && !request.Admin && !targetIsSuperAdmin)
             return Bad("GM is an add-on role for a Member, Admin, or SuperAdmin.");
 
@@ -83,6 +80,40 @@ public class UsersController(UserManager<ApplicationUser> users) : ClubApiContro
             return gmResult;
 
         return Ok(await MapAsync(user));
+    }
+
+    [HttpDelete("{id}")]
+    [Authorize(Policy = PolicyNames.Admin)]
+    public async Task<IActionResult> Delete(string id, CancellationToken cancellationToken)
+    {
+        if (string.Equals(id, CurrentUserId, StringComparison.Ordinal))
+            return Bad("You cannot delete your own account.");
+
+        var user = await users.FindByIdAsync(id);
+        if (user is null)
+            return NotFound();
+
+        if (await users.IsInRoleAsync(user, RoleNames.SuperAdmin))
+            return Forbidden("The configured SuperAdmin account cannot be deleted here.");
+
+        if (await db.PlaySessions.AnyAsync(session => session.CreatedByUserId == id, cancellationToken)
+            || await db.GalleryPhotos.AnyAsync(photo => photo.OwnerUserId == id, cancellationToken)
+            || await db.EventPhotos.AnyAsync(photo => photo.OwnerUserId == id, cancellationToken)
+            || await db.ClubDocuments.AnyAsync(document => document.OwnerUserId == id, cancellationToken))
+        {
+            return ConflictProblem("This account still owns events, photos, or documents. Remove that content before deleting the account.");
+        }
+
+        var attendances = await db.SessionAttendances.Where(row => row.UserId == id).ToListAsync(cancellationToken);
+        db.SessionAttendances.RemoveRange(attendances);
+        var players = await db.RuleSetPlayers.Where(row => row.OwnerUserId == id).ToListAsync(cancellationToken);
+        db.RuleSetPlayers.RemoveRange(players);
+        await db.SaveChangesAsync(cancellationToken);
+
+        var deleted = await users.DeleteAsync(user);
+        if (!deleted.Succeeded)
+            return IdentityProblem(deleted);
+        return NoContent();
     }
 
     private async Task<ActionResult?> SetRoleAsync(ApplicationUser user, string role, bool shouldHave)

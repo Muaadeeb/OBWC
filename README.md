@@ -8,7 +8,7 @@ The public site covers the pages from the club's page list (About, Next Event, G
 
 | Project | Role |
 | --- | --- |
-| `src/OBWC.Client` | Blazor WebAssembly + MudBlazor. Deployed as its own site. |
+| `src/OBWC.Client` | Blazor WebAssembly + MudBlazor. Served by `OBWC.Api` on the same site. |
 | `src/OBWC.Api` | ASP.NET Core Web API, Identity, EF Core. Deployed as its own site. |
 | `src/OBWC.Shared` | DTOs, roles, and Central Time formatting shared by the client and API. |
 | `tests/OBWC.Tests` | xUnit API tests, including authorization, ownership, and calendar behavior. |
@@ -67,17 +67,15 @@ The JWT key must be at least 32 characters. `appsettings.Development.json` sets 
 
 In Development, if SMTP is empty, confirmation and reset links are written to the API log and listed at `/dev/mail` on the client (the API route is `GET /api/dev/mail` and returns 404 outside Development).
 
-Set the client API address in `src/OBWC.Client/wwwroot/appsettings.json` (`ApiBaseUrl`) for local development. The published client loads `wwwroot/appsettings.Production.json`, which points at `https://api.omahabeachwc.com`. Both files are public. Do not put secrets in them.
+The API project hosts the Blazor pages, the same way the BattleTech server hosts its client. One site serves both. `wwwroot/appsettings.json` still points local split-debug at `http://localhost:5150`. A published site leaves `ApiBaseUrl` empty, so the pages call whatever host they were loaded from. Both files are public. Do not put secrets in them.
 
 ## Run
 
 ```bash
 dotnet run --project src/OBWC.Api
-dotnet run --project src/OBWC.Client
 ```
 
-API: `http://localhost:5150` (Swagger in Development at `/swagger`).
-Client: `http://localhost:5163`.
+Site: `http://localhost:5150` (Swagger in Development at `/swagger`).
 
 Development sample accounts (not club members, password `Sample-Dev-Only-1!` from `Seed:SamplePassword`):
 

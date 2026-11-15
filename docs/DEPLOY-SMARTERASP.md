@@ -1,16 +1,15 @@
 # Deploy OBWC to SmarterASP.NET
 
-The live site is two IIS sites plus the host's SQL Server database. SSL for omahabeachwc.com is already on the account. Nothing in this repository contains the SQL password or the JWT signing key.
+The live site is one IIS site plus the host's SQL Server database. `OBWC.Api` hosts the Blazor pages and the API together, the same way the BattleTech server hosts its client. SSL for omahabeachwc.com is already on the account. Nothing in this repository contains the SQL password or the JWT signing key.
 
 | Site | Host | What you upload |
 | --- | --- | --- |
-| Client | `omahabeachwc.com` and `www.omahabeachwc.com` | Contents of the published Blazor `wwwroot` folder, including `web.config` |
-| API | `api.omahabeachwc.com` | The published API folder, including `web.config` and `OBWC.Api.dll` |
+| OBWC | `omahabeachwc.com` and `www.omahabeachwc.com` | The published `OBWC.Api` folder, including `web.config` and `OBWC.Api.dll` |
 | Database | SmarterASP MSSQL | Schema from `deploy/sql/obwc-sqlserver.sql`, or from EF on startup |
 
-The client is static WebAssembly. It calls the API from the browser, so the API's CORS list must include the client origins. The client is served from the site root (`<base href="/" />` in `index.html`). Do not put the client in a virtual directory unless you change that base path to match.
+The pages call the API on the same host. A published client leaves `ApiBaseUrl` empty, so the browser uses the site it loaded. Do not publish `OBWC.Client` on its own. That upload is only the static pages and would replace this site.
 
-If the certificate does not already list `www` and `api`, add those names in the SmarterASP SSL panel before the first request.
+If the certificate does not already list `www`, add that name in the SmarterASP SSL panel before the first request.
 
 ## 1. Create the SQL Server database
 
@@ -72,7 +71,7 @@ The API reads `ConnectionStrings:DefaultConnection`. Environment variables overr
    | `Smtp__Password` | Mailbox password |
    | `Smtp__FromAddress` | From address |
    | `Smtp__FromDisplayName` | `Omaha Beach Wargaming Club` |
-   | `App__PublicBaseUrl` | `https://api.omahabeachwc.com` |
+   | `App__PublicBaseUrl` | `https://omahabeachwc.com` |
    | `App__ClientBaseUrl` | `https://omahabeachwc.com` |
    | `App__ApplyMigrations` | `true` |
    | `App__EnableSwagger` | `false` |
@@ -83,7 +82,7 @@ The API reads `ConnectionStrings:DefaultConnection`. Environment variables overr
 
 2. **Server-side `appsettings.Production.json`.** Copy `src/OBWC.Api/appsettings.Production.example.json` to the API folder on the server, next to `OBWC.Api.dll`, and replace the placeholders. That filename is gitignored. `dotnet publish` does not copy it. Do not add the filled-in file to the repository.
 
-3. **`web.config` on the server only.** The published file already sets `ASPNETCORE_ENVIRONMENT` to `Production` and leaves a comment where the secrets go. Add the connection string there if the panel has no environment-variable UI. Do not commit the edited file. `*.publishsettings` and `*.pubxml` are gitignored because Web Deploy profiles contain the deploy password.
+3. **`web.config` on the server only.** The published file already sets `ASPNETCORE_ENVIRONMENT` to `Production` and leaves a comment where the secrets go. Add the connection string there if the panel has no environment-variable UI. Do not commit the edited file. The two `SmarterASP.pubxml` profiles are checked in and contain no password. `*.publishsettings` and `*.pubxml.user` stay gitignored.
 
 `Jwt:Key` must be at least 32 characters. The API refuses to start while it still contains `SET_WITH` or still starts with `DEV_ONLY_`. It also refuses a SQLite file path or a `YOUR_SQL_` placeholder once it is running in Production.
 
@@ -93,9 +92,9 @@ Uploads (gallery, venue photos, documents) go to `App_Data/uploads` under the AP
 
 To see a startup failure, set `stdoutLogEnabled="true"` on the server's `web.config`, create a `logs` folder the pool can write, recycle the site, and read `logs\stdout*.log`. Set it back to `false` after.
 
-## 3. Publish the API
+## 3. Publish the site
 
-Create the API site in the panel, point it at `api.omahabeachwc.com`, and give it its own application pool. Set the .NET version to **.NET 10** (No Managed Code / Integrated) when the panel lists it.
+Publish `OBWC.Api` to the existing website `timothyingledue-001-site3` (`omahabeachwc.com`). Set that site's .NET version to **.NET 10** (No Managed Code / Integrated) when the panel lists it. Do not create a second website for the API.
 
 From a machine with the .NET 10 SDK, at the repository root:
 
@@ -111,27 +110,17 @@ dotnet publish src/OBWC.Api/OBWC.Api.csproj -c Release -r win-x64 --self-contain
 
 `appsettings.Development.json`, `appsettings.Testing.json`, and `appsettings.Production.example.json` are not in the publish folder.
 
-**Web Deploy.** In the panel, open the API site and download the Web Deploy profile. Import it in Visual Studio or run `dotnet publish` with that profile. The profile contains a deploy password. Leave it uncommitted.
+**Web Deploy.** In Visual Studio, right-click `OBWC.Api` and choose **Publish**. The profile is `SmarterASP`. It deploys to `timothyingledue-001-site3` on `win1006.site4now.net` and includes the local gitignored `appsettings.Production.json`. Visual Studio asks for the control-panel password for `timothyingledue-001` and stores it in `SmarterASP.pubxml.user`, which is gitignored.
 
-**FTP.** Upload the contents of `publish/api` (the folder that contains `web.config` and `OBWC.Api.dll`) to the API site's root. The FTP host and user are in the panel. Use FTP over TLS if the panel offers it.
+**FTP.** Upload the contents of `publish/api` (the folder that contains `web.config` and `OBWC.Api.dll`) to the site root. The FTP host and user are in the panel. Use FTP over TLS if the panel offers it.
 
 Recycle the site after changing environment variables or `web.config`.
 
-## 4. Publish the Blazor client
+## 4. Pages
 
-`src/OBWC.Client/wwwroot/appsettings.Production.json` sets `ApiBaseUrl` to `https://api.omahabeachwc.com`. That file is public. It has no secrets. Change it before publishing if the API host is different, then publish again.
+The Blazor pages are part of the `OBWC.Api` publish. Do not publish `OBWC.Client` to the site. The API serves `index.html` for page routes such as `/schedule`, and it serves `/api` for the data calls. A published client leaves `ApiBaseUrl` empty, so those calls stay on `omahabeachwc.com`.
 
-`wwwroot/appsettings.json` stays on `http://localhost:5150` for local development. A published client runs as Production and uses the production file.
-
-```bash
-dotnet publish src/OBWC.Client/OBWC.Client.csproj -c Release -o ./publish/client
-```
-
-Upload the **contents of** `publish/client/wwwroot` to the client site root. That includes `index.html`, `_framework`, `web.config`, and `appsettings.Production.json`.
-
-`web.config` maps `.wasm`, `.blat`, `.dat`, and the font types, and it rewrites unknown paths to `index.html` so client routes such as `/schedule` work on IIS. The site root must be the client. `<base href="/" />` matches that layout.
-
-Bind both `omahabeachwc.com` and `www.omahabeachwc.com` to this site. CORS already allows both.
+Bind both `omahabeachwc.com` and `www.omahabeachwc.com` to this site.
 
 ## 5. First sign-in
 
@@ -139,8 +128,8 @@ Register the SuperAdmin email on the live site. The API assigns that role when t
 
 ## 6. Checks
 
-- `GET https://api.omahabeachwc.com/health` returns `{ "status": "ok" }`.
-- `https://omahabeachwc.com` and `https://www.omahabeachwc.com` load the home page, and the schedule requests `https://api.omahabeachwc.com` without a CORS error.
+- `GET https://omahabeachwc.com/health` returns `{ "status": "ok" }`.
+- `https://omahabeachwc.com` and `https://www.omahabeachwc.com` load the home page, and the schedule loads from that same host.
 - A member can schedule a game. Another member cannot edit it. An admin can.
 - Gallery upload stops at 100 photos.
 

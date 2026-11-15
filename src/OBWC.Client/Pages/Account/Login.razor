@@ -8,6 +8,11 @@
     <MudTextField @bind-Value="_email" Label="Email" InputType="InputType.Email" Variant="Variant.Outlined" />
     <MudTextField @bind-Value="_password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Class="mt-3" />
     @if (!string.IsNullOrEmpty(_error)) { <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert> }
+    @if (_needsConfirmation)
+    {
+        <MudButton Class="mt-3" Variant="Variant.Outlined" Color="Color.Primary" Disabled="_busy" OnClick="Resend">Send confirmation email</MudButton>
+    }
+    @if (!string.IsNullOrEmpty(_notice)) { <MudAlert Severity="Severity.Info" Class="mt-3">@_notice</MudAlert> }
     <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Submit">Sign in</MudButton>
     <div class="mt-3">
         <MudLink Href="/account/register">Create an account</MudLink>
@@ -16,13 +21,16 @@
 </MudPaper>
 
 @code {
-    private string _email = "", _password = "", _error = "";
+    private string _email = "", _password = "", _error = "", _notice = "";
     private bool _busy;
+    private bool _needsConfirmation;
     [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
 
     private async Task Submit()
     {
         _error = "";
+        _notice = "";
+        _needsConfirmation = false;
         if (!FormChecks.IsEmail(_email))
         {
             _error = "Enter a valid email address.";
@@ -38,8 +46,27 @@
         try
         {
             _error = await Auth.LoginAsync(new LoginRequest { Email = _email.Trim(), Password = _password }) ?? "";
+            _needsConfirmation = _error.Contains("Confirm your email", StringComparison.OrdinalIgnoreCase);
             if (string.IsNullOrEmpty(_error))
                 Nav.NavigateTo(Safe(ReturnUrl));
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task Resend()
+    {
+        _notice = "";
+        _busy = true;
+        try
+        {
+            var error = await Auth.ResendAsync(_email.Trim());
+            if (error is null)
+                _notice = "If that account is waiting for confirmation, a new email is on its way.";
+            else
+                _error = error;
         }
         finally
         {

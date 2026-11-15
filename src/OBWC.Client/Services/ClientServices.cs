@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using OBWC.Shared.Dtos;
 
 namespace OBWC.Client.Services;
@@ -95,11 +96,11 @@ public static class FormChecks
 
 public sealed class ApiOrigin
 {
-    public ApiOrigin(IConfiguration configuration)
+    public ApiOrigin(IConfiguration configuration, IWebAssemblyHostEnvironment environment)
     {
         var raw = configuration["ApiBaseUrl"];
         if (string.IsNullOrWhiteSpace(raw))
-            throw new InvalidOperationException("Set ApiBaseUrl in wwwroot/appsettings.json. It is the public URL of the API site.");
+            raw = environment.BaseAddress;
         if (!raw.EndsWith('/'))
             raw += "/";
         Base = new Uri(raw, UriKind.Absolute);
@@ -342,10 +343,13 @@ public sealed class AuthApi(HttpClient http, TokenStore tokens, ObwcAuthenticati
         return null;
     }
 
-    public async Task<string?> RegisterAsync(RegisterRequest request)
+    public async Task<(bool Ok, string Message)> RegisterAsync(RegisterRequest request)
     {
         var response = await http.PostAsJsonAsync("api/auth/register", request, JsonDefaults.Options);
-        return response.IsSuccessStatusCode ? null : await ApiErrors.ReadAsync(response);
+        if (!response.IsSuccessStatusCode)
+            return (false, await ApiErrors.ReadAsync(response) ?? "The request could not be completed.");
+        var body = await response.Content.ReadFromJsonAsync<MessageResponse>(JsonDefaults.Options);
+        return (true, body?.Message ?? "Account created.");
     }
 
     public async Task<string?> ConfirmAsync(ConfirmEmailRequest request)

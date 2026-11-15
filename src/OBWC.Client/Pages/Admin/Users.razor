@@ -2,11 +2,12 @@
 @attribute [Authorize(Roles = "Admin,SuperAdmin")]
 @inject ClubApi Club
 @inject AuthApi Auth
+@inject IDialogService Dialogs
 @inject ISnackbar Snackbar
 
 <PageTitle>Users · OBWC</PageTitle>
 <h1>Users and roles</h1>
-<p class="lede">SuperAdmin is assigned only from the server setting Authorization:SuperAdminEmail. It cannot be granted here. GM is an add-on for a Member, Admin, or SuperAdmin. Admins do maintenance. A GM edits only events they created. A member edits only what they own.</p>
+<p class="lede">SuperAdmin is assigned only from the server setting Authorization:SuperAdminEmail. It cannot be granted here. A guest has an account and no Member, Admin, or SuperAdmin role, and is listed here. GM is an add-on for a Member, Admin, or SuperAdmin. Admins do maintenance. A GM edits only events they created. A member edits only what they own.</p>
 @if (_loading)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -26,6 +27,7 @@ else
     <HeaderContent>
         <MudTh>Name</MudTh>
         <MudTh>Email</MudTh>
+        <MudTh>Guest</MudTh>
         <MudTh>Member</MudTh>
         <MudTh>Admin</MudTh>
         <MudTh>GM</MudTh>
@@ -34,17 +36,22 @@ else
     <RowTemplate>
         <MudTd DataLabel="Name">@context.User.DisplayName</MudTd>
         <MudTd DataLabel="Email">@context.User.Email</MudTd>
-        <MudTd DataLabel="Member"><MudCheckBox T="bool" @bind-Value="context.Member" Disabled="@context.Locked" /></MudTd>
-        <MudTd DataLabel="Admin"><MudCheckBox T="bool" @bind-Value="context.Admin" Disabled="@context.Locked" /></MudTd>
-        <MudTd DataLabel="GM"><MudCheckBox T="bool" @bind-Value="context.Gm" Disabled="@context.Locked" /></MudTd>
+        <MudTd DataLabel="Guest"><MudCheckBox T="bool" Value="@context.IsGuest" ValueChanged="@(value => SetGuest(context, value))" Disabled="@(context.Locked || context.SuperAdmin)" /></MudTd>
+        <MudTd DataLabel="Member"><MudCheckBox T="bool" Value="@context.Member" ValueChanged="@(value => SetMember(context, value))" Disabled="@context.Locked" /></MudTd>
+        <MudTd DataLabel="Admin"><MudCheckBox T="bool" Value="@context.Admin" ValueChanged="@(value => SetAdmin(context, value))" Disabled="@context.Locked" /></MudTd>
+        <MudTd DataLabel="GM"><MudCheckBox T="bool" @bind-Value="context.Gm" Disabled="@(context.Locked || context.IsGuest)" /></MudTd>
         <MudTd DataLabel="Save">
-            @if (context.SuperAdmin)
-            {
-                <MudChip T="string" Size="Size.Small" Color="Color.Primary">SuperAdmin</MudChip>
-            }
             @if (!context.Locked)
             {
                 <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="() => Save(context)">Save</MudButton>
+            }
+            @if (context.SuperAdmin)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ml-2">SuperAdmin</MudChip>
+            }
+            @if (context.User.Id != _viewerId && !context.SuperAdmin)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" Class="ml-2" OnClick="() => Delete(context)">Delete</MudButton>
             }
         </MudTd>
     </RowTemplate>
@@ -56,12 +63,14 @@ else
     private List<Row> _rows = [];
     private bool _loading = true;
     private string? _error;
+    private string? _viewerId;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
         var me = await Auth.MeAsync();
+        _viewerId = me?.Id;
         var viewerIsSuperAdmin = me?.Roles.Contains(RoleNames.SuperAdmin) == true;
         _rows = (await Club.GetUsersAsync()).Select(user => new Row
         {
@@ -75,6 +84,35 @@ else
         }
         catch (ClubApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
+    }
+
+    private static void SetGuest(Row row, bool guest)
+    {
+        if (row.Locked || row.SuperAdmin)
+            return;
+        if (guest)
+        {
+            row.Member = false;
+            row.Admin = false;
+            row.Gm = false;
+            return;
+        }
+
+        row.Member = true;
+    }
+
+    private static void SetMember(Row row, bool member)
+    {
+        row.Member = member;
+        if (!row.Member && !row.Admin)
+            row.Gm = false;
+    }
+
+    private static void SetAdmin(Row row, bool admin)
+    {
+        row.Admin = admin;
+        if (!row.Member && !row.Admin)
+            row.Gm = false;
     }
 
     private async Task Save(Row row)
@@ -96,6 +134,28 @@ else
         }
     }
 
+    private async Task Delete(Row row)
+    {
+        var confirmed = await Dialogs.ShowMessageBoxAsync(
+            "Delete account",
+            $"Delete {row.User.DisplayName} ({row.User.Email})? This cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+        if (confirmed != true)
+            return;
+
+        try
+        {
+            await Club.DeleteUserAsync(row.User.Id);
+            _rows.Remove(row);
+            Snackbar.Add("Account deleted.", Severity.Success);
+        }
+        catch (ClubApiException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
     private sealed class Row
     {
         public UserSummaryDto User { get; set; } = new();
@@ -104,5 +164,6 @@ else
         public bool Gm { get; set; }
         public bool SuperAdmin { get; set; }
         public bool Locked { get; set; }
+        public bool IsGuest => !Member && !Admin && !SuperAdmin;
     }
 }

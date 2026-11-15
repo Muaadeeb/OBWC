@@ -4,24 +4,26 @@
 <PageTitle>Create an account · OBWC</PageTitle>
 <MudPaper Class="pa-4 account-card" Outlined="true">
     <h1>Create an account</h1>
-    <p class="lede">Confirm the email before you sign in. In local development the confirmation link is on Dev mail.</p>
+    <p class="lede">Confirm the email before you sign in.</p>
     <MudTextField @bind-Value="_name" Label="Name to show other members" Variant="Variant.Outlined" />
     <MudTextField @bind-Value="_email" Label="Email" InputType="InputType.Email" Variant="Variant.Outlined" Class="mt-3" />
     <MudTextField @bind-Value="_password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Class="mt-3"
                   HelperText="8 or more characters, with upper and lower case, a number, and a symbol." />
-    <MudSelect T="MembershipType?" @bind-Value="_type" Label="Membership" Variant="Variant.Outlined" Clearable="true" Class="mt-3">
+    <MudSelect T="MembershipType?" @bind-Value="_type" Label="Membership" Variant="Variant.Outlined" Clearable="true" Class="mt-3"
+               HelperText="Leave this blank to register as a guest. An admin can grant Member later.">
         <MudSelectItem T="MembershipType?" Value="@MembershipType.Adult">Adult — $25</MudSelectItem>
         <MudSelectItem T="MembershipType?" Value="@MembershipType.Student">Student, 22 and under — $10</MudSelectItem>
         <MudSelectItem T="MembershipType?" Value="@MembershipType.FriendOfObwc">Friend of OBWC — free</MudSelectItem>
     </MudSelect>
     @if (!string.IsNullOrEmpty(_message)) { <MudAlert Severity="@(_error ? Severity.Error : Severity.Success)" Class="mt-3">@_message</MudAlert> }
-    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Submit">Register</MudButton>
+    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || _registered)" OnClick="Submit">Register</MudButton>
 </MudPaper>
 
 @code {
     private string _name = "", _email = "", _password = "", _message = "";
     private bool _error;
     private bool _busy;
+    private bool _registered;
     private MembershipType? _type;
 
     private async Task Submit()
@@ -46,15 +48,16 @@
         _busy = true;
         try
         {
-            var error = await Auth.RegisterAsync(new RegisterRequest
+            var (ok, message) = await Auth.RegisterAsync(new RegisterRequest
             {
                 DisplayName = _name.Trim(),
                 Email = _email.Trim(),
                 Password = _password,
                 MembershipType = _type
             });
-            _error = error is not null;
-            _message = error ?? "Account created. Check your email to confirm it. In local development, open Dev mail in the menu (or the API log) for the confirmation link.";
+            _error = !ok;
+            _registered = ok;
+            _message = message;
         }
         finally
         {

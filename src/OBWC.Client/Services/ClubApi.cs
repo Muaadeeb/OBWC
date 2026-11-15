@@ -201,6 +201,9 @@ public sealed class ClubApi(HttpClient http)
     public Task<UserSummaryDto> UpdateRolesAsync(string id, UpdateRolesRequest request, CancellationToken cancellationToken = default) =>
         SendAsync<UserSummaryDto>(HttpMethod.Put, $"api/users/{id}/roles", request, cancellationToken);
 
+    public Task DeleteUserAsync(string id, CancellationToken cancellationToken = default) =>
+        DeleteAsync($"api/users/{id}", cancellationToken);
+
     public Task<IReadOnlyList<DevMailMessageDto>> GetDevMailAsync(CancellationToken cancellationToken = default) =>
         GetListAsync<DevMailMessageDto>("api/dev/mail", cancellationToken);
 

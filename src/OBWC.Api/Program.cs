@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Components.WebAssembly.Server;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -163,11 +164,79 @@ if (app.Configuration.GetValue("App:EnableSwagger", app.Environment.IsDevelopmen
     app.UseSwaggerUI(options => options.SwaggerEndpoint("/swagger/v1/swagger.json", "OBWC API"));
 }
 
+if (app.Environment.IsDevelopment())
+    app.UseWebAssemblyDebugging();
+
+app.UseBlazorFrameworkFiles();
+app.UseStaticFiles();
 app.UseCors("Client");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapFallback(async context =>
+{
+    if (context.Request.Path.StartsWithSegments("/api")
+        || context.Request.Path.StartsWithSegments("/health")
+        || context.Request.Path.StartsWithSegments("/swagger")
+        || context.Request.Path.StartsWithSegments("/_framework")
+        || context.Request.Path.StartsWithSegments("/_content"))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    var indexPath = FindIndexHtml(app.Environment);
+    var html = await File.ReadAllTextAsync(indexPath);
+    var script = FindBlazorScript(app.Environment);
+    if (script is not null)
+        html = html.Replace("blazor.webassembly#[.{fingerprint}].js", script, StringComparison.Ordinal);
+    context.Response.ContentType = "text/html; charset=utf-8";
+    await context.Response.WriteAsync(html);
+});
 app.Run();
+
+static string FindIndexHtml(IWebHostEnvironment environment)
+{
+    var candidates = new[]
+    {
+        Path.Combine(environment.WebRootPath ?? "", "index.html"),
+        Path.Combine(AppContext.BaseDirectory, "wwwroot", "index.html"),
+        Path.GetFullPath(Path.Combine(environment.ContentRootPath, "..", "OBWC.Client", "wwwroot", "index.html"))
+    };
+    return candidates.First(File.Exists);
+}
+
+static string? FindBlazorScript(IWebHostEnvironment environment)
+{
+    var roots = new List<string>();
+    var published = Path.Combine(AppContext.BaseDirectory, "wwwroot", "_framework");
+    if (Directory.Exists(published))
+        roots.Add(published);
+    if (!string.IsNullOrEmpty(environment.WebRootPath))
+    {
+        var webRootFramework = Path.Combine(environment.WebRootPath, "_framework");
+        if (Directory.Exists(webRootFramework))
+            roots.Add(webRootFramework);
+    }
+
+    var clientBin = Path.GetFullPath(Path.Combine(environment.ContentRootPath, "..", "OBWC.Client", "bin"));
+    if (Directory.Exists(clientBin))
+        roots.AddRange(Directory.EnumerateDirectories(clientBin, "_framework", SearchOption.AllDirectories));
+
+    foreach (var root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
+    {
+        var match = Directory.EnumerateFiles(root, "blazor.webassembly.*.js")
+            .Select(Path.GetFileName)
+            .FirstOrDefault(name => name is not null
+                && !name.EndsWith(".br", StringComparison.OrdinalIgnoreCase)
+                && !name.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)
+                && !name.Equals("blazor.webassembly.js", StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+            return match;
+    }
+
+    return null;
+}
 
 static void ValidateConfiguration(WebApplicationBuilder builder)
 {

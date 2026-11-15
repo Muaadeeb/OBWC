@@ -132,6 +132,56 @@ public class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>, IDisposa
         Assert.Contains(RoleNames.Member, stripped.User.Roles);
         var ownerAfter = await LoginAsync("owner@obwc.test");
         Assert.Contains(RoleNames.SuperAdmin, ownerAfter.User.Roles);
+
+        var deleteOwner = await adminClient.DeleteAsync($"/api/users/{owner.User.Id}");
+        Assert.Equal(HttpStatusCode.Forbidden, deleteOwner.StatusCode);
+        var deleteSelf = await adminClient.DeleteAsync($"/api/users/{admin.User.Id}");
+        Assert.Equal(HttpStatusCode.BadRequest, deleteSelf.StatusCode);
+        var memberDelete = await memberClient.DeleteAsync($"/api/users/{admin.User.Id}");
+        Assert.Equal(HttpStatusCode.Forbidden, memberDelete.StatusCode);
+
+        var removed = await adminClient.DeleteAsync($"/api/users/{member.User.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
+        var after = await ownerClient.GetFromJsonAsync<List<UserSummaryDto>>("/api/users");
+        Assert.DoesNotContain(after!, user => user.Id == member.User.Id);
+    }
+
+    [Fact]
+    public async Task Guest_without_a_membership_is_listed_and_can_become_a_member()
+    {
+        await _api.RegisterAndLoginAsync("guest-admin@obwc.test", "Guest Admin");
+        await _api.AddRolesAsync("guest-admin@obwc.test", RoleNames.Admin);
+        var admin = await LoginAsync("guest-admin@obwc.test");
+
+        var register = await _api.Client.PostAsJsonAsync("/api/auth/register", new RegisterRequest
+        {
+            Email = "guest@obwc.test",
+            Password = ApiTest.Password,
+            DisplayName = "Walk-in Guest"
+        });
+        Assert.Equal(HttpStatusCode.Accepted, register.StatusCode);
+
+        using var adminClient = _api.As(admin);
+        var listed = await adminClient.GetFromJsonAsync<List<UserSummaryDto>>("/api/users");
+        var guest = Assert.Single(listed!, user => user.Email == "guest@obwc.test");
+        Assert.DoesNotContain(RoleNames.Member, guest.Roles);
+        Assert.DoesNotContain(RoleNames.Admin, guest.Roles);
+
+        var gmOnly = await adminClient.PutAsJsonAsync($"/api/users/{guest.Id}/roles", new UpdateRolesRequest { Member = false, Gm = true });
+        Assert.Equal(HttpStatusCode.BadRequest, gmOnly.StatusCode);
+
+        var promote = await adminClient.PutAsJsonAsync($"/api/users/{guest.Id}/roles", new UpdateRolesRequest { Member = true });
+        Assert.Equal(HttpStatusCode.OK, promote.StatusCode);
+        var promoted = await promote.Content.ReadFromJsonAsync<UserSummaryDto>();
+        Assert.Contains(RoleNames.Member, promoted!.Roles);
+
+        var demote = await adminClient.PutAsJsonAsync($"/api/users/{guest.Id}/roles", new UpdateRolesRequest { Member = false });
+        Assert.Equal(HttpStatusCode.OK, demote.StatusCode);
+        var after = await adminClient.GetFromJsonAsync<List<UserSummaryDto>>("/api/users");
+        var stillGuest = Assert.Single(after!, user => user.Id == guest.Id);
+        Assert.DoesNotContain(RoleNames.Member, stillGuest.Roles);
+        Assert.DoesNotContain(RoleNames.Admin, stillGuest.Roles);
+        Assert.DoesNotContain(RoleNames.Gm, stillGuest.Roles);
     }
 
     private async Task<AuthResponse> LoginAsync(string email)
