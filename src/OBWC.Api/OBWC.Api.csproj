@@ -30,10 +30,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Data/SqlServerMigrations/**" />
-    <None Include="Data/SqlServerMigrations/**" />
     <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
     <Content Update="appsettings.Testing.json" CopyToPublishDirectory="Never" />
+    <Content Update="appsettings.Production.example.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+    <Content Remove="appsettings.Production.json" />
   </ItemGroup>
 
 </Project>

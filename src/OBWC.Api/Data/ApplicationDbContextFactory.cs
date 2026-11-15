@@ -7,7 +7,9 @@ namespace OBWC.Api.Data;
 
 /// <summary>
 /// Used by <c>dotnet ef</c> so migrations can be created without starting the site.
-/// The provider follows <c>Database__Provider</c> (Sqlite by default). The connection string has no password.
+/// The provider follows <c>Database__Provider</c> (Sqlite by default). Set it to SqlServer to
+/// script or update the SQL Server migrations. The connection string is read from
+/// <c>ConnectionStrings__DefaultConnection</c> and is never stored in this file.
 /// </summary>
 public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<ApplicationDbContext>
 {
