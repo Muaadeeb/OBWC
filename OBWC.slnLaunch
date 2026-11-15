@@ -1,14 +1,16 @@
 [
   {
-    "Name": "New Profile",
+    "Name": "OBWC",
     "Projects": [
       {
         "Path": "src\\OBWC.Api\\OBWC.Api.csproj",
-        "Action": "StartWithoutDebugging"
+        "Action": "Start",
+        "DebugTarget": "http"
       },
       {
         "Path": "src\\OBWC.Client\\OBWC.Client.csproj",
-        "Action": "Start"
+        "Action": "Start",
+        "DebugTarget": "http"
       }
     ]
   }
