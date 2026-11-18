@@ -41,35 +41,46 @@ public class GalleryController(
         if (cleanEvent.Length is 0 or > 200)
             return Bad("Name the public event (game day, Nuke-Con, NADBAG, ScroogeCon, or another club event).");
 
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var count = await db.GalleryPhotos.CountAsync(cancellationToken);
-        if (count >= MaxPhotos)
-            return ConflictProblem($"The gallery holds at most {MaxPhotos} photos of OBWC games at public events.");
+        // SQL Server retry rejects a transaction that is started outside this strategy.
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult<GalleryPhotoDto>>(async cancellationToken =>
+        {
+            db.ChangeTracker.Clear();
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            var count = await db.GalleryPhotos.CountAsync(cancellationToken);
+            if (count >= MaxPhotos)
+                return ConflictProblem($"The gallery holds at most {MaxPhotos} photos of OBWC games at public events.");
 
-        StoredFile stored;
-        try
-        {
-            stored = await files.SaveAsync(file, "gallery", FileStorage.ImageExtensions, cancellationToken);
-        }
-        catch (InvalidUploadException ex)
-        {
-            return Bad(ex.Message);
-        }
-
-        var photo = new GalleryPhoto
-        {
-            Id = Guid.NewGuid(),
-            Caption = cleanCaption,
-            PublicEventName = cleanEvent,
-            RelativePath = stored.RelativePath,
-            ContentType = stored.ContentType,
-            OwnerUserId = CurrentUserId,
-            CreatedAtUtc = DateTime.UtcNow
-        };
-        db.GalleryPhotos.Add(photo);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return Created($"/api/gallery/{photo.Id}", Map(photo));
+            string? storedPath = null;
+            try
+            {
+                var stored = await files.SaveAsync(file, "gallery", FileStorage.ImageExtensions, cancellationToken);
+                storedPath = stored.RelativePath;
+                var photo = new GalleryPhoto
+                {
+                    Id = Guid.NewGuid(),
+                    Caption = cleanCaption,
+                    PublicEventName = cleanEvent,
+                    RelativePath = stored.RelativePath,
+                    ContentType = stored.ContentType,
+                    OwnerUserId = CurrentUserId,
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+                db.GalleryPhotos.Add(photo);
+                await db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return Created($"/api/gallery/{photo.Id}", Map(photo));
+            }
+            catch (InvalidUploadException ex)
+            {
+                return Bad(ex.Message);
+            }
+            catch
+            {
+                files.Delete(storedPath);
+                throw;
+            }
+        }, cancellationToken);
     }
 
     [HttpPut("{id:guid}")]

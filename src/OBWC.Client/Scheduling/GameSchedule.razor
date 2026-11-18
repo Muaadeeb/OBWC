@@ -9,15 +9,16 @@
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2 flex-wrap">
     <h1 class="mud-typography mud-typography-h4 mb-0">Game schedule</h1>
+    <MudButton Class="ml-3" Size="Size.Small" Variant="Variant.Outlined" Href="/calendar" StartIcon="@Icons.Material.Filled.CalendarMonth">View calendar</MudButton>
     <MudSpacer />
     <AuthorizeView Roles="Member,Admin,SuperAdmin">
         <Authorized>
-            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="DownloadIcsAsync" StartIcon="@Icons.Material.Filled.Download">Download .ics</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="DownloadIcsAsync" StartIcon="@Icons.Material.Filled.Download">Download calendar .ics</MudButton>
             <MudButton Size="Size.Small" Variant="Variant.Text" Href="/my-schedule" StartIcon="@Icons.Material.Filled.EventAvailable">My schedule</MudButton>
         </Authorized>
     </AuthorizeView>
 </MudStack>
-<p class="lede">Public calendar of club games. Times are Central Time (CT). Members schedule nights, collect RSVPs, and check in when the game is near.</p>
+<p class="lede">Public calendar of club games and game days. A game day is one place and time that can host several games. A game is one table a member runs. Times are Central Time (CT).</p>
 
 @if (_loading)
 {
@@ -40,33 +41,47 @@ else
                 @FilterLabel(filter)
             </MudChip>
         }
-        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@_filtered.Count() shown</MudChip>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Visible.Count shown</MudChip>
     </MudStack>
 
-    <AuthorizeView Roles="Member,Admin,SuperAdmin">
+    <AuthorizeView>
         <Authorized>
-            <MudPaper Class="pa-3 mb-4" Outlined="true">
-                <MudText Typo="Typo.subtitle1" Class="mb-2">Schedule a game</MudText>
+            <MudExpansionPanels Class="mb-4" Elevation="0">
+                <MudExpansionPanel Text="Schedule a game">
+                <MudForm @ref="_gameForm">
                 <MudGrid>
-                    <MudItem xs="12" md="3"><MudDatePicker @bind-Date="_newDate" Label="First date" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12" md="2"><MudTimePicker @bind-Time="_newTime" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm="true" /></MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudDatePicker @bind-Date="_newDate" Label="First date" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       Validation="@(new Func<DateTime?, string?>(ValidateGameDate))" />
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudTimePicker @bind-Time="_newTime" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm="true"
+                                       Validation="@(new Func<TimeSpan?, string?>(ValidateGameStart))" />
+                    </MudItem>
                     <MudItem xs="12" md="2"><MudTimePicker @bind-Time="_newEnd" Label="End (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm="true" /></MudItem>
                     <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="_weeks" Label="Weeks" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="26" HelperText="1 = single night" /></MudItem>
-                    <MudItem xs="12" md="3"><MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_venue" Label="Venue" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_address" Label="Address" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Validation="@(new Func<string, string?>(ValidateGameTitle))" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_host" Label="Host" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      MaxLength="200" HelperText="Who is running this game." />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_venue" @bind-Value:after="SyncGamePlace" Label="Venue" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Validation="@(new Func<string, string?>(ValidateGameVenue))" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_address" @bind-Value:after="SyncGamePlace" Label="Address" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Validation="@(new Func<string, string?>(ValidateGameAddress))" />
+                    </MudItem>
                     <MudItem xs="12" md="4"><MudTextField @bind-Value="_online" Label="Discord / online link" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" md="6"><MudTextField @bind-Value="_notes" Label="Games / notes" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" /></MudItem>
                     <MudItem xs="12" md="3"><MudTextField @bind-Value="_locationNotes" Label="Location notes" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" md="3"><MudNumericField T="int?" @bind-Value="_cap" Label="Player cap (Going)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Clearable="true" HelperText="Overflow → waitlist" /></MudItem>
                     <MudItem xs="12" md="4">
-                        <MudSelect T="string" @bind-Value="_ruleSetId" Label="Rule set" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
-                            <MudSelectItem T="string" Value="@string.Empty">(none)</MudSelectItem>
-                            @foreach (var ruleSet in _ruleSets)
-                            {
-                                <MudSelectItem T="string" Value="@ruleSet.Id.ToString()">@ruleSet.Name</MudSelectItem>
-                            }
-                        </MudSelect>
+                        <RuleSetField @bind-Value="_ruleSetName" RuleSets="_ruleSets" />
                     </MudItem>
                     <MudItem xs="12" md="4">
                         <MudCheckBox T="bool" @bind-Value="_published" Label="Publish to the public calendar" Color="Color.Primary" />
@@ -78,11 +93,62 @@ else
                         </MudButton>
                     </MudItem>
                 </MudGrid>
+                </MudForm>
                 @if (!string.IsNullOrEmpty(_formError))
                 {
-                    <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@_formError</MudAlert>
+                    <MudAlert Severity="@(_membersOnlyNotice ? Severity.Warning : Severity.Error)" Dense="true" Class="mt-2">@_formError</MudAlert>
                 }
-            </MudPaper>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+            <MudExpansionPanels Class="mb-4" Elevation="0">
+                <MudExpansionPanel Text="Schedule a game day">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2 d-block">One place and time. Members post games onto it afterwards. A weekly series repeats the day, not the games.</MudText>
+                <MudForm @ref="_dayForm">
+                <MudGrid>
+                    <MudItem xs="12" md="3">
+                        <MudDatePicker @bind-Date="_dayDate" Label="First date" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       Validation="@(new Func<DateTime?, string?>(ValidateDayDate))" />
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudTimePicker @bind-Time="_dayStart" @bind-Time:after="SyncDayTimes" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm="true"
+                                       Validation="@(new Func<TimeSpan?, string?>(ValidateDayStart))" />
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudTimePicker @bind-Time="_dayEnd" @bind-Time:after="SyncDayTimes" Label="End (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm="true"
+                                       Validation="@(new Func<TimeSpan?, string?>(ValidateDayEnd))" />
+                    </MudItem>
+                    <MudItem xs="12" md="2"><MudNumericField T="int" @bind-Value="_dayWeeks" Label="Weeks" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="26" HelperText="1 = one date" /></MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudTextField @bind-Value="_dayTitle" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Validation="@(new Func<string, string?>(ValidateDayTitle))" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_dayVenue" @bind-Value:after="SyncDayPlace" Label="Venue" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Validation="@(new Func<string, string?>(ValidateDayVenue))" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_dayAddress" @bind-Value:after="SyncDayPlace" Label="Address" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Validation="@(new Func<string, string?>(ValidateDayAddress))" />
+                    </MudItem>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_dayOnline" Label="Discord / online link" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_dayNotes" Label="Notes" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" /></MudItem>
+                    <MudItem xs="12" md="3"><MudTextField @bind-Value="_dayLocationNotes" Label="Location notes" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudCheckBox T="bool" @bind-Value="_dayPublished" Label="Publish to the public calendar" Color="Color.Primary" />
+                    </MudItem>
+                    <MudItem xs="12" md="4" Class="d-flex align-center">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="CreateDayAsync" StartIcon="@Icons.Material.Filled.Event">
+                            @(_dayWeeks > 1 ? $"Add {_dayWeeks}-week game day" : "Add game day")
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+                </MudForm>
+                @if (!string.IsNullOrEmpty(_dayFormError))
+                {
+                    <MudAlert Severity="@(_dayMembersOnly ? Severity.Warning : Severity.Error)" Dense="true" Class="mt-2">@_dayFormError</MudAlert>
+                }
+                </MudExpansionPanel>
+            </MudExpansionPanels>
         </Authorized>
     </AuthorizeView>
 
@@ -90,125 +156,86 @@ else
     {
         <MudAlert Severity="Severity.Error">@_error</MudAlert>
     }
-    else if (!_filtered.Any())
+    else if (Visible.Count == 0)
     {
-        <MudAlert Severity="Severity.Info" Dense="true">No games match this view.</MudAlert>
+        <MudAlert Severity="Severity.Info" Dense="true">Nothing on the schedule matches this view.</MudAlert>
     }
     else
     {
-        @foreach (var ev in _filtered)
+        @foreach (var row in Visible)
         {
-            var isPast = ev.ScheduledAt < DateTimeOffset.UtcNow.AddHours(-6);
-            var nearNow = !ev.IsCancelled && ev.IsPublished
-                && DateTimeOffset.UtcNow >= ev.ScheduledAt.AddHours(-3)
-                && DateTimeOffset.UtcNow <= (ev.EndsAt ?? ev.ScheduledAt.AddHours(4)).AddHours(6);
-            var expanded = _expanded.Contains(ev.Id);
-            <MudPaper Class="pa-3 mb-2" Outlined="true" Style="@(ev.IsCancelled ? "opacity:.75" : ev.IsPublished ? null : "border-style:dashed")">
-                <MudStack Row="true" AlignItems="AlignItems.Start" Class="flex-wrap">
-                    <MudStack Spacing="0" Style="min-width:10rem">
-                        <MudText Typo="Typo.subtitle1"><strong>@ClubTime.FormatDate(ev.ScheduledAt)</strong></MudText>
-                        <MudText Typo="Typo.body2">@ClubTime.FormatTimeRange(ev.ScheduledAt, ev.EndsAt)</MudText>
-                        @if (ev.IsCancelled) { <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="fit-chip">Cancelled</MudChip> }
-                        @if (!ev.IsPublished) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="fit-chip">Draft</MudChip> }
-                        @if (ev.SeriesKey is not null) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="fit-chip">Series</MudChip> }
-                        @if (ev.PlayerCap is int cap) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Cap @cap</MudChip> }
-                        @if (isPast) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Past</MudChip> }
-                    </MudStack>
-                    <MudStack Spacing="1" Style="flex:1; min-width:14rem">
-                        <MudText Typo="Typo.h6">@(string.IsNullOrWhiteSpace(ev.Title) ? "Club game" : ev.Title)</MudText>
-                        <MudText Typo="Typo.caption">@ev.Venue @(!string.IsNullOrWhiteSpace(ev.Address) ? " · " + ev.Address : "")</MudText>
-                        @if (!string.IsNullOrWhiteSpace(ev.RuleSetName))
-                        {
-                            <MudText Typo="Typo.caption">@ev.RuleSetName</MudText>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(ev.OnlineLink))
-                        {
-                            <MudLink Href="@ev.OnlineLink" Target="_blank">Online / Discord</MudLink>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(ev.LocationNotes))
-                        {
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@ev.LocationNotes</MudText>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(ev.Notes))
-                        {
-                            <MudText Typo="Typo.body2" Style="white-space:pre-wrap">@ev.Notes</MudText>
-                        }
-                        @if (ev.IsCancelled && !string.IsNullOrWhiteSpace(ev.CancellationReason))
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Error">@ev.CancellationReason</MudText>
-                        }
-                        <MudText Typo="Typo.caption">Scheduled by @ev.OwnerDisplayName@(ev.OwnerIsGm ? " · GM" : "")</MudText>
-                        <EventPhotos EventId="ev.Id" CanAdd="ev.CanAddPhotos" Photos="ev.Photos" OnChanged="ReloadAsync" />
-                        <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Going @ev.Going</MudChip>
-                            @if (ev.Waitlist > 0) { <MudChip T="string" Size="Size.Small" Color="Color.Info">Waitlist @ev.Waitlist</MudChip> }
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">Maybe @ev.Maybe</MudChip>
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error">No @ev.NotGoing</MudChip>
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">No reply @ev.NoResponse</MudChip>
-                            @if (ev.Present > 0) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Checked in @ev.Present</MudChip> }
+            if (row.Day is GameDayDto day)
+            {
+                <MudPaper Class="pa-3 mb-2" Outlined="true" Style="@(day.IsCancelled ? "opacity:.75" : day.IsPublished ? null : "border-style:dashed")">
+                    <MudStack Row="true" AlignItems="AlignItems.Start" Class="flex-wrap">
+                        <MudStack Spacing="0" Style="min-width:10rem">
+                            <MudText Typo="Typo.subtitle1"><strong>@ClubTime.FormatDate(day.ScheduledAt)</strong></MudText>
+                            <MudText Typo="Typo.body2">@ClubTime.FormatTimeRange(day.ScheduledAt, day.EndsAt)</MudText>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Class="fit-chip">Game day</MudChip>
+                            @if (day.IsCancelled) { <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="fit-chip">Cancelled</MudChip> }
+                            @if (!day.IsPublished) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="fit-chip">Draft</MudChip> }
+                            @if (day.SeriesKey is not null) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="fit-chip">Series</MudChip> }
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@day.Games.Count @(day.Games.Count == 1 ? "game" : "games")</MudChip>
                         </MudStack>
-                        @if (expanded && _rosters.TryGetValue(ev.Id, out var roster))
-                        {
-                            <MudSimpleTable Dense="true" Hover="true" Class="mt-2">
-                                <thead><tr><th>Player</th><th>RSVP</th><th>Night</th><th>Check-in</th>@if (ev.CanEdit && !ev.IsCancelled) { <th></th> }</tr></thead>
-                                <tbody>
-                                @foreach (var row in roster)
-                                {
-                                    <tr>
-                                        <td>@row.DisplayName</td>
-                                        <td>@row.Rsvp</td>
-                                        <td>@row.NightStatus</td>
-                                        <td>@(row.CheckedInAt is DateTimeOffset checkedIn ? ClubTime.FormatTime(checkedIn) : "—")</td>
-                                        @if (ev.CanEdit && !ev.IsCancelled)
-                                        {
-                                            <td>
-                                                <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="_busy"
-                                                           OnClick="() => ManagerCheckInAsync(ev.Id, row.UserId, row.NightStatus == AttendanceStatus.Present)">
-                                                    @(row.NightStatus == AttendanceStatus.Present ? "Undo" : "Check in")
-                                                </MudButton>
-                                            </td>
-                                        }
-                                    </tr>
-                                }
-                                </tbody>
-                            </MudSimpleTable>
-                        }
-                    </MudStack>
-                    <MudStack Spacing="1" AlignItems="AlignItems.End">
-                        @if (ev.CanEdit && !ev.IsCancelled)
-                        {
-                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => ToggleRosterAsync(ev.Id)">@(expanded ? "Hide roster" : "RSVP roster")</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="_busy" OnClick="() => PublishAsync(ev, !ev.IsPublished)">@(ev.IsPublished ? "Unpublish" : "Publish")</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="_busy" OnClick="() => EditAsync(ev)">Edit details…</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Warning" Disabled="_busy" OnClick="() => RescheduleAsync(ev)">Reschedule…</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" Disabled="_busy" OnClick="() => CancelAsync(ev)">Cancel event…</MudButton>
-                        }
-                        <AuthorizeView Roles="Member,Admin,SuperAdmin">
-                            <Authorized>
-                                @if (!ev.IsCancelled && ev.AllowPlayerRsvp && ev.IsPublished && !isPast)
-                                {
-                                    <MudButtonGroup OverrideStyles="false" Class="flex-wrap">
-                                        <MudButton Size="Size.Small" Variant="@(ev.MyRsvp is SessionRsvpStatus.Going or SessionRsvpStatus.Waitlist ? Variant.Filled : Variant.Outlined)" Color="Color.Success" Disabled="_busy" OnClick="() => RsvpAsync(ev.Id, SessionRsvpStatus.Going)">Going</MudButton>
-                                        <MudButton Size="Size.Small" Variant="@(ev.MyRsvp == SessionRsvpStatus.Maybe ? Variant.Filled : Variant.Outlined)" Color="Color.Warning" Disabled="_busy" OnClick="() => RsvpAsync(ev.Id, SessionRsvpStatus.Maybe)">Maybe</MudButton>
-                                        <MudButton Size="Size.Small" Variant="@(ev.MyRsvp == SessionRsvpStatus.NotGoing ? Variant.Filled : Variant.Outlined)" Color="Color.Error" Disabled="_busy" OnClick="() => RsvpAsync(ev.Id, SessionRsvpStatus.NotGoing)">No</MudButton>
-                                    </MudButtonGroup>
-                                    @if (ev.MyRsvp == SessionRsvpStatus.Waitlist)
+                        <MudStack Spacing="1" Style="flex:1; min-width:14rem">
+                            <MudText Typo="Typo.h6">@(string.IsNullOrWhiteSpace(day.Title) ? "Game day" : day.Title)</MudText>
+                            <MudText Typo="Typo.caption">@day.Venue @(!string.IsNullOrWhiteSpace(day.Address) ? " · " + day.Address : "")</MudText>
+                            @if (!string.IsNullOrWhiteSpace(day.OnlineLink))
+                            {
+                                <MudLink Href="@day.OnlineLink" Target="_blank">Online / Discord</MudLink>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(day.LocationNotes))
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@day.LocationNotes</MudText>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(day.Notes))
+                            {
+                                <MudText Typo="Typo.body2" Style="white-space:pre-wrap">@day.Notes</MudText>
+                            }
+                            @if (day.IsCancelled && !string.IsNullOrWhiteSpace(day.CancellationReason))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">@day.CancellationReason</MudText>
+                            }
+                            <MudText Typo="Typo.caption">Hosted by @day.OwnerDisplayName</MudText>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">Players going @day.PlayersGoing</MudChip>
+                        </MudStack>
+                        <MudStack Spacing="1" AlignItems="AlignItems.End">
+                            @if (day.CanEdit && !day.IsCancelled)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="_busy" OnClick="() => PublishDayAsync(day)">@(day.IsPublished ? "Unpublish" : "Publish")</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="_busy" OnClick="() => EditDayAsync(day)">Edit game day…</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Warning" Disabled="_busy" OnClick="() => RescheduleDayAsync(day)">Reschedule…</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" Disabled="_busy" OnClick="() => CancelDayAsync(day)">Cancel game day…</MudButton>
+                            }
+                            <AuthorizeView Roles="Member,Admin,SuperAdmin">
+                                <Authorized>
+                                    @if (!day.IsCancelled)
                                     {
-                                        <MudText Typo="Typo.caption" Color="Color.Info">You are on the waitlist</MudText>
+                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="() => AddGameAsync(day)">Add a game</MudButton>
                                     }
-                                }
-                                @if (!ev.IsCancelled && nearNow)
-                                {
-                                    <MudButton Size="Size.Small" Variant="@(ev.IAmCheckedIn ? Variant.Filled : Variant.Outlined)" Color="Color.Success" Disabled="_busy"
-                                               OnClick="() => SelfCheckInAsync(ev)">
-                                        @(ev.IAmCheckedIn ? "Checked in (undo)" : "Check in — I'm here")
-                                    </MudButton>
-                                }
-                            </Authorized>
-                        </AuthorizeView>
+                                </Authorized>
+                            </AuthorizeView>
+                        </MudStack>
                     </MudStack>
-                </MudStack>
-            </MudPaper>
+                    @foreach (var game in day.Games)
+                    {
+                        <ScheduleGameCard Event="game" Busy="_busy" Nested="true" DayStart="day.ScheduledAt" DayEnd="day.EndsAt"
+                                          Expanded="_expanded.Contains(game.Id)" Roster="RosterFor(game.Id)"
+                                          OnToggleRoster="ToggleRosterAsync" OnPublish="PublishFromCard" OnEdit="EditAsync"
+                                          OnReschedule="RescheduleAsync" OnCancel="CancelAsync" OnDetach="DetachAsync"
+                                          OnSelfCheckIn="SelfCheckInAsync" OnRsvp="RsvpFromCard" OnManagerCheckIn="ManagerFromCard"
+                                          OnChanged="ReloadAsync" />
+                    }
+                </MudPaper>
+            }
+            else if (row.Game is CalendarEventDto ev)
+            {
+                <ScheduleGameCard Event="ev" Busy="_busy" Expanded="_expanded.Contains(ev.Id)" Roster="RosterFor(ev.Id)"
+                                  OnToggleRoster="ToggleRosterAsync" OnPublish="PublishFromCard" OnEdit="EditAsync"
+                                  OnReschedule="RescheduleAsync" OnCancel="CancelAsync" OnDetach="DetachAsync"
+                                  OnSelfCheckIn="SelfCheckInAsync" OnRsvp="RsvpFromCard" OnManagerCheckIn="ManagerFromCard"
+                                  OnChanged="ReloadAsync" />
+            }
         }
     }
 }
@@ -220,9 +247,20 @@ else
     private bool _busy;
     private string? _error;
     private string? _formError;
+    private string? _dayFormError;
+    private bool _membersOnlyNotice;
+    private bool _dayMembersOnly;
+    private MudForm _gameForm = null!;
+    private MudForm _dayForm = null!;
+    private bool _gameAttempted;
+    private bool _dayAttempted;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
     private string _window = "upcoming";
     private CalFilter _filter = CalFilter.Upcoming;
     private List<CalendarEventDto> _events = [];
+    private List<GameDayDto> _days = [];
     private List<RuleSetDto> _ruleSets = [];
     private readonly Dictionary<Guid, IReadOnlyList<RosterRowDto>> _rosters = [];
     private readonly HashSet<Guid> _expanded = [];
@@ -233,17 +271,55 @@ else
     private TimeSpan? _newEnd = new TimeSpan(22, 0, 0);
     private int _weeks = 1;
     private string _title = "";
+    private string _host = "";
     private string _venue = "";
     private string _address = "";
     private string _online = "";
     private string _notes = "";
     private string _locationNotes = "";
     private int? _cap;
-    private string _ruleSetId = "";
+    private string? _ruleSetName;
     private bool _published = true;
     private bool _allowRsvp = true;
 
-    private IEnumerable<CalendarEventDto> _filtered => _events.Where(Matches);
+    private DateTime? _dayDate = ClubTime.ClubToday().AddDays(7);
+    private TimeSpan? _dayStart = new TimeSpan(10, 0, 0);
+    private TimeSpan? _dayEnd = new TimeSpan(18, 0, 0);
+    private int _dayWeeks = 1;
+    private string _dayTitle = "";
+    private string _dayVenue = "";
+    private string _dayAddress = "";
+    private string _dayOnline = "";
+    private string _dayNotes = "";
+    private string _dayLocationNotes = "";
+    private bool _dayPublished = true;
+
+    private sealed record ScheduleRow(DateTimeOffset Start, CalendarEventDto? Game, GameDayDto? Day);
+
+    private List<ScheduleRow> Visible
+    {
+        get
+        {
+            var rows = new List<ScheduleRow>();
+            foreach (var ev in _events)
+            {
+                if (ev.GameDayId is null && Matches(ev))
+                    rows.Add(new ScheduleRow(ev.ScheduledAt, ev, null));
+            }
+
+            foreach (var day in _days)
+            {
+                if (MatchesDay(day))
+                    rows.Add(new ScheduleRow(day.ScheduledAt, null, day));
+            }
+
+            rows.Sort((left, right) => left.Start.CompareTo(right.Start));
+            return rows;
+        }
+    }
+
+    private IReadOnlyList<RosterRowDto>? RosterFor(Guid id) =>
+        _rosters.TryGetValue(id, out var roster) ? roster : null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -272,6 +348,14 @@ else
         _ => ev.ScheduledAt >= DateTimeOffset.UtcNow.AddHours(-6) || _window != "upcoming"
     };
 
+    private bool MatchesDay(GameDayDto day) => _filter switch
+    {
+        CalFilter.Past => day.ScheduledAt < DateTimeOffset.UtcNow.AddHours(-6),
+        CalFilter.MyGoing => day.Games.Any(ev => ev.MyRsvp is SessionRsvpStatus.Going or SessionRsvpStatus.Waitlist),
+        CalFilter.NeedsMyRsvp => day.Games.Any(ev => !ev.IsCancelled && ev.AllowPlayerRsvp && ev.IsPublished && ev.ScheduledAt > DateTimeOffset.UtcNow && ev.MyRsvp == SessionRsvpStatus.Unknown),
+        _ => day.ScheduledAt >= DateTimeOffset.UtcNow.AddHours(-6) || _window != "upcoming"
+    };
+
     private static string FilterLabel(CalFilter filter) => filter switch
     {
         CalFilter.Past => "Past",
@@ -293,11 +377,17 @@ else
         try
         {
             if (_window == "upcoming")
+            {
                 _events = (await Schedule.ListAsync()).ToList();
+                _days = (await Schedule.ListGameDaysAsync()).ToList();
+            }
             else
             {
                 var parts = _window.Split('-');
-                _events = (await Schedule.ListAsync(int.Parse(parts[0]), int.Parse(parts[1]))).ToList();
+                var year = int.Parse(parts[0]);
+                var month = int.Parse(parts[1]);
+                _events = (await Schedule.ListAsync(year, month)).ToList();
+                _days = (await Schedule.ListGameDaysAsync(year, month)).ToList();
             }
         }
         catch (ClubApiException ex)
@@ -313,16 +403,19 @@ else
     private async Task CreateAsync()
     {
         _formError = null;
-        if (_newDate is null || _newTime is null || string.IsNullOrWhiteSpace(_title))
+        _membersOnlyNotice = false;
+        if (!await CanScheduleAsync())
         {
-            _formError = "Enter a title, date, and start time.";
+            _formError = "Only members may schedule a game.";
+            _membersOnlyNotice = true;
             return;
         }
-        if (string.IsNullOrWhiteSpace(_venue) && string.IsNullOrWhiteSpace(_address))
-        {
-            _formError = "Add a venue or an address.";
+
+        _gameAttempted = true;
+        await _gameForm.ValidateAsync();
+        if (!_gameForm.IsValid || _newDate is null || _newTime is null)
             return;
-        }
+
         var start = ClubTime.FromClubWallClock(_newDate.Value, _newTime.Value);
         DateTimeOffset? end = null;
         if (_newEnd is TimeSpan endTime)
@@ -349,10 +442,12 @@ else
                 Weeks = _weeks,
                 IsPublished = _published,
                 AllowPlayerRsvp = _allowRsvp,
-                RuleSetId = Guid.TryParse(_ruleSetId, out var ruleSetId) ? ruleSetId : null
+                RuleSetName = Blank(_ruleSetName ?? ""),
+                HostName = Blank(_host)
             });
             Snackbar.Add(_weeks > 1 ? "Series added." : "Game added.", Severity.Success);
             _title = "";
+            _host = "";
             await ReloadAsync();
         }
         catch (ClubApiException ex)
@@ -443,8 +538,10 @@ else
             [nameof(EditEventDialog.OnlineLink)] = ev.OnlineLink,
             [nameof(EditEventDialog.LocationNotes)] = ev.LocationNotes,
             [nameof(EditEventDialog.PlayerCap)] = ev.PlayerCap,
-            [nameof(EditEventDialog.RuleSetId)] = ev.RuleSetId,
-            [nameof(EditEventDialog.RuleSets)] = _ruleSets
+            [nameof(EditEventDialog.RuleSetName)] = ev.RuleSetName,
+            [nameof(EditEventDialog.HostName)] = ev.HostName,
+            [nameof(EditEventDialog.RuleSets)] = _ruleSets,
+            [nameof(EditEventDialog.HidePlace)] = ev.GameDayId is not null
         };
         var dialog = await Dialogs.ShowAsync<EditEventDialog>("Edit event details", parameters);
         var result = await dialog.Result;
@@ -462,7 +559,8 @@ else
                 OnlineLink = edited.OnlineLink,
                 LocationNotes = edited.LocationNotes,
                 PlayerCap = edited.PlayerCap,
-                RuleSetId = edited.RuleSetId
+                RuleSetName = edited.RuleSetName,
+                HostName = edited.HostName
             });
             await ReloadAsync();
         }
@@ -477,7 +575,8 @@ else
             [nameof(RescheduleDialog.EventTitle)] = ev.Title ?? "Club game",
             [nameof(RescheduleDialog.CurrentStart)] = ev.ScheduledAt,
             [nameof(RescheduleDialog.CurrentEnd)] = ev.EndsAt,
-            [nameof(RescheduleDialog.HasSeries)] = ev.SeriesKey is not null
+            [nameof(RescheduleDialog.HasSeries)] = ev.SeriesKey is not null,
+            [nameof(RescheduleDialog.RequireEnd)] = ev.GameDayId is not null
         };
         var dialog = await Dialogs.ShowAsync<RescheduleDialog>("Reschedule event", parameters);
         var result = await dialog.Result;
@@ -493,7 +592,7 @@ else
                 EntireSeriesFollowing = moved.EntireSeriesFollowing,
                 Notify = moved.Notify
             });
-            Snackbar.Add("Event rescheduled.", Severity.Success);
+            Snackbar.Add("Game rescheduled.", Severity.Success);
             await ReloadAsync();
         }
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
@@ -520,7 +619,7 @@ else
                 EntireSeries = cancelled.EntireSeries,
                 Notify = cancelled.Notify
             });
-            Snackbar.Add("Event cancelled.", Severity.Success);
+            Snackbar.Add("Game cancelled.", Severity.Success);
             await ReloadAsync();
         }
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
@@ -537,5 +636,297 @@ else
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
 
+    private async Task SyncGamePlace()
+    {
+        if (_gameAttempted)
+            await _gameForm.ValidateAsync();
+    }
+
+    private async Task SyncDayPlace()
+    {
+        if (_dayAttempted)
+            await _dayForm.ValidateAsync();
+    }
+
+    private async Task SyncDayTimes()
+    {
+        if (_dayAttempted)
+            await _dayForm.ValidateAsync();
+    }
+
+    private static string? ValidateGameTitle(string title) =>
+        string.IsNullOrWhiteSpace(title) ? "Enter a title." : null;
+
+    private string? ValidateGameDate(DateTime? date) =>
+        date is null ? "Enter a date." : null;
+
+    private string? ValidateGameStart(TimeSpan? start) =>
+        start is null ? "Enter a start time." : null;
+
+    private string? ValidateGameVenue(string venue) => GamePlaceError(venue, _address);
+
+    private string? ValidateGameAddress(string address) => GamePlaceError(_venue, address);
+
+    private static string? GamePlaceError(string? venue, string? address) =>
+        string.IsNullOrWhiteSpace(venue) && string.IsNullOrWhiteSpace(address)
+            ? "Add a venue or an address."
+            : null;
+
+    private static string? ValidateDayTitle(string title) =>
+        string.IsNullOrWhiteSpace(title) ? "Enter a title." : null;
+
+    private string? ValidateDayDate(DateTime? date) =>
+        date is null ? "Enter a date." : null;
+
+    private string? ValidateDayStart(TimeSpan? start) =>
+        start is null ? "Enter a start time." : null;
+
+    private string? ValidateDayEnd(TimeSpan? end)
+    {
+        if (end is null)
+            return "Enter an end time.";
+        if (_dayDate is null || _dayStart is null)
+            return null;
+
+        var start = ClubTime.FromClubWallClock(_dayDate.Value, _dayStart.Value);
+        var endDate = _dayDate.Value.Date;
+        if (end.Value <= _dayStart.Value)
+            endDate = endDate.AddDays(1);
+        var endAt = ClubTime.FromClubWallClock(endDate, end.Value);
+        return endAt <= start ? "End time must be after the start time." : null;
+    }
+
+    private string? ValidateDayVenue(string venue) => DayPlaceError(venue, _dayAddress);
+
+    private string? ValidateDayAddress(string address) => DayPlaceError(_dayVenue, address);
+
+    private static string? DayPlaceError(string? venue, string? address) =>
+        string.IsNullOrWhiteSpace(venue) && string.IsNullOrWhiteSpace(address)
+            ? "A game day needs a venue or an address."
+            : null;
+
+    private async Task<bool> CanScheduleAsync()
+    {
+        if (AuthenticationState is null)
+            return false;
+        var state = await AuthenticationState;
+        var user = state.User;
+        return user.IsInRole(RoleNames.Member)
+            || user.IsInRole(RoleNames.Admin)
+            || user.IsInRole(RoleNames.SuperAdmin);
+    }
+
     private static string? Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private Task RsvpFromCard((Guid Id, SessionRsvpStatus Status) args) => RsvpAsync(args.Id, args.Status);
+
+    private Task ManagerFromCard((Guid SessionId, string UserId, bool Undo) args) =>
+        ManagerCheckInAsync(args.SessionId, args.UserId, args.Undo);
+
+    private Task PublishFromCard(CalendarEventDto ev) => PublishAsync(ev, !ev.IsPublished);
+
+    private async Task DetachAsync(CalendarEventDto ev)
+    {
+        _busy = true;
+        try
+        {
+            await Schedule.DetachAsync(ev.Id);
+            Snackbar.Add("Game taken off the game day. It is now its own game.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task CreateDayAsync()
+    {
+        _dayFormError = null;
+        _dayMembersOnly = false;
+        if (!await CanScheduleAsync())
+        {
+            _dayFormError = "Only members may schedule a game.";
+            _dayMembersOnly = true;
+            return;
+        }
+
+        _dayAttempted = true;
+        await _dayForm.ValidateAsync();
+        if (!_dayForm.IsValid || _dayDate is null || _dayStart is null || _dayEnd is null)
+            return;
+
+        var start = ClubTime.FromClubWallClock(_dayDate.Value, _dayStart.Value);
+        var endDate = _dayDate.Value.Date;
+        if (_dayEnd.Value <= _dayStart.Value)
+            endDate = endDate.AddDays(1);
+        var end = ClubTime.FromClubWallClock(endDate, _dayEnd.Value);
+
+        _busy = true;
+        try
+        {
+            await Schedule.CreateGameDayAsync(new CreateGameDayRequest
+            {
+                Title = _dayTitle.Trim(),
+                ScheduledAt = start,
+                EndsAt = end,
+                Venue = Blank(_dayVenue),
+                Address = Blank(_dayAddress),
+                OnlineLink = Blank(_dayOnline),
+                Notes = Blank(_dayNotes),
+                LocationNotes = Blank(_dayLocationNotes),
+                Weeks = _dayWeeks,
+                IsPublished = _dayPublished
+            });
+            Snackbar.Add(_dayWeeks > 1 ? "Game day series added." : "Game day added.", Severity.Success);
+            _dayTitle = "";
+            await ReloadAsync();
+        }
+        catch (ClubApiException ex)
+        {
+            _dayFormError = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AddGameAsync(GameDayDto day)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(AddGameToDayDialog.DayTitle)] = day.Title,
+            [nameof(AddGameToDayDialog.DayStart)] = day.ScheduledAt,
+            [nameof(AddGameToDayDialog.DayEnd)] = day.EndsAt,
+            [nameof(AddGameToDayDialog.RuleSets)] = _ruleSets
+        };
+        var dialog = await Dialogs.ShowAsync<AddGameToDayDialog>("Add a game", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not AddGameToDayDialog.Result added)
+            return;
+        _busy = true;
+        try
+        {
+            await Schedule.CreateAsync(new CreateSessionRequest
+            {
+                Title = added.Title,
+                ScheduledAt = added.FollowGameDayTimes ? day.ScheduledAt : added.Start!.Value,
+                EndsAt = added.FollowGameDayTimes ? day.EndsAt : added.End,
+                Notes = added.Notes,
+                PlayerCap = added.PlayerCap,
+                Weeks = 1,
+                IsPublished = added.Published,
+                AllowPlayerRsvp = added.AllowRsvp,
+                RuleSetName = added.RuleSetName,
+                HostName = added.HostName,
+                GameDayId = day.Id,
+                FollowGameDayTimes = added.FollowGameDayTimes
+            });
+            Snackbar.Add("Game added to the game day.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task EditDayAsync(GameDayDto day)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(EditGameDayDialog.Title)] = day.Title,
+            [nameof(EditGameDayDialog.Notes)] = day.Notes,
+            [nameof(EditGameDayDialog.Venue)] = day.Venue,
+            [nameof(EditGameDayDialog.Address)] = day.Address,
+            [nameof(EditGameDayDialog.OnlineLink)] = day.OnlineLink,
+            [nameof(EditGameDayDialog.LocationNotes)] = day.LocationNotes
+        };
+        var dialog = await Dialogs.ShowAsync<EditGameDayDialog>("Edit game day", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not EditGameDayDialog.Result edited)
+            return;
+        _busy = true;
+        try
+        {
+            await Schedule.UpdateGameDayAsync(day.Id, new UpdateGameDayRequest
+            {
+                Title = edited.Title,
+                Notes = edited.Notes,
+                Venue = edited.Venue,
+                Address = edited.Address,
+                OnlineLink = edited.OnlineLink,
+                LocationNotes = edited.LocationNotes
+            });
+            await ReloadAsync();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task RescheduleDayAsync(GameDayDto day)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(RescheduleDialog.EventTitle)] = day.Title ?? "Game day",
+            [nameof(RescheduleDialog.CurrentStart)] = day.ScheduledAt,
+            [nameof(RescheduleDialog.CurrentEnd)] = day.EndsAt,
+            [nameof(RescheduleDialog.HasSeries)] = day.SeriesKey is not null,
+            [nameof(RescheduleDialog.Noun)] = "game day",
+            [nameof(RescheduleDialog.RequireEnd)] = true
+        };
+        var dialog = await Dialogs.ShowAsync<RescheduleDialog>("Reschedule game day", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not RescheduleDialog.Result moved)
+            return;
+        _busy = true;
+        try
+        {
+            await Schedule.RescheduleGameDayAsync(day.Id, new RescheduleSessionRequest
+            {
+                NewStart = moved.NewStart,
+                NewEnd = moved.NewEnd,
+                EntireSeriesFollowing = moved.EntireSeriesFollowing,
+                Notify = moved.Notify
+            });
+            Snackbar.Add("Game day rescheduled.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task CancelDayAsync(GameDayDto day)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(CancelEventDialog.EventTitle)] = day.Title ?? "Game day",
+            [nameof(CancelEventDialog.HasSeries)] = day.SeriesKey is not null,
+            [nameof(CancelEventDialog.Noun)] = "game day",
+            [nameof(CancelEventDialog.CancelsGames)] = true
+        };
+        var dialog = await Dialogs.ShowAsync<CancelEventDialog>("Cancel game day", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not CancelEventDialog.Result cancelled)
+            return;
+        _busy = true;
+        try
+        {
+            await Schedule.CancelGameDayAsync(day.Id, new CancelSessionRequest
+            {
+                Reason = cancelled.Reason,
+                EntireSeries = cancelled.EntireSeries,
+                Notify = cancelled.Notify
+            });
+            Snackbar.Add("Game day cancelled.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task PublishDayAsync(GameDayDto day)
+    {
+        _busy = true;
+        try { await Schedule.PublishGameDayAsync(day.Id, !day.IsPublished); await ReloadAsync(); }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
 }

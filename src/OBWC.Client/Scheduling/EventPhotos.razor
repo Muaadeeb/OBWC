@@ -12,7 +12,9 @@
                 @foreach (var photo in Photos)
                 {
                     <figure class="catalog-card">
-                        <img class="gallery-photo" src="@Origin.Absolute(photo.Url)" alt="@photo.Caption" />
+                        <div class="event-photo-frame">
+                            <img class="event-photo" src="@Origin.Absolute(photo.Url)" alt="@photo.Caption" />
+                        </div>
                         <figcaption>
                             <strong>@photo.Caption</strong><br />
                             <span class="mud-text-secondary">@ClubTime.FormatDateTime(AsUtc(photo.CreatedAtUtc))</span>

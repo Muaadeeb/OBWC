@@ -9,7 +9,7 @@
     <MudSpacer />
     <MudButton Variant="Variant.Text" Href="/schedule" StartIcon="@Icons.Material.Filled.CalendarMonth">Full calendar</MudButton>
 </MudStack>
-<p class="lede">Your Going, Waitlist, and Maybe nights. Times are Central Time (CT).</p>
+<p class="lede">Your Going, Waitlist, and Maybe games. Times are Central Time (CT).</p>
 
 @if (_loading)
 {
@@ -39,6 +39,7 @@ else
                 </MudStack>
                 <MudStack Spacing="1" Style="flex:1" AlignItems="AlignItems.Start">
                     <MudText Typo="Typo.subtitle1">@(string.IsNullOrWhiteSpace(ev.Title) ? "Club game" : ev.Title)</MudText>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="fit-chip">@(ev.GameDayId is null ? "Game" : "Game on a game day")</MudChip>
                     @if (ev.IsCancelled) { <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="fit-chip">Cancelled</MudChip> }
                     @if (!string.IsNullOrWhiteSpace(ev.Venue) || !string.IsNullOrWhiteSpace(ev.Address))
                     {

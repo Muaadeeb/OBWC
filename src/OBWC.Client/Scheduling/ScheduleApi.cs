@@ -63,6 +63,31 @@ public sealed class ScheduleApi(HttpClient http)
         return items ?? [];
     }
 
+    public Task DetachAsync(Guid id, CancellationToken cancellationToken = default) =>
+        SendEmptyAsync(HttpMethod.Post, $"api/events/{id}/detach", new { }, cancellationToken);
+
+    public async Task<IReadOnlyList<GameDayDto>> ListGameDaysAsync(int? year = null, int? month = null, CancellationToken cancellationToken = default)
+    {
+        var url = year is int y && month is int m ? $"api/game-days?year={y}&month={m}" : "api/game-days";
+        var items = await http.GetFromJsonAsync<List<GameDayDto>>(url, JsonDefaults.Options, cancellationToken);
+        return items ?? [];
+    }
+
+    public Task<CreateSeriesResultDto> CreateGameDayAsync(CreateGameDayRequest request, CancellationToken cancellationToken = default) =>
+        SendAsync<CreateSeriesResultDto>(HttpMethod.Post, "api/game-days", request, cancellationToken);
+
+    public Task<GameDayDto> UpdateGameDayAsync(Guid id, UpdateGameDayRequest request, CancellationToken cancellationToken = default) =>
+        SendAsync<GameDayDto>(HttpMethod.Put, $"api/game-days/{id}", request, cancellationToken);
+
+    public Task PublishGameDayAsync(Guid id, bool published, CancellationToken cancellationToken = default) =>
+        SendEmptyAsync(HttpMethod.Post, $"api/game-days/{id}/publish", new PublishSessionRequest { Published = published }, cancellationToken);
+
+    public Task CancelGameDayAsync(Guid id, CancelSessionRequest request, CancellationToken cancellationToken = default) =>
+        SendEmptyAsync(HttpMethod.Post, $"api/game-days/{id}/cancel", request, cancellationToken);
+
+    public Task RescheduleGameDayAsync(Guid id, RescheduleSessionRequest request, CancellationToken cancellationToken = default) =>
+        SendEmptyAsync(HttpMethod.Post, $"api/game-days/{id}/reschedule", request, cancellationToken);
+
     public async Task<byte[]> DownloadIcsAsync(CancellationToken cancellationToken = default)
     {
         var response = await http.GetAsync("api/events/calendar.ics", cancellationToken);

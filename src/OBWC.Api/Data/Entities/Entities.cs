@@ -26,8 +26,8 @@ public interface IOwnedResource
 }
 
 /// <summary>
-/// One scheduled club game night. This is the schedule module's event, ported from the
-/// campaign play-session calendar (no campaign, contract, or award fields).
+/// One scheduled game. It stands alone, or it is posted onto a <see cref="GameDay"/>
+/// and then keeps that day's place and stays inside that day's start and end.
 /// </summary>
 public class PlaySession : IOwnedResource
 {
@@ -53,8 +53,43 @@ public class PlaySession : IOwnedResource
     public Guid? SeriesKey { get; set; }
     public Guid? RuleSetId { get; set; }
     public RuleSet? RuleSet { get; set; }
+    /// <summary>Rule set typed for this game when it is not on the club list.</summary>
+    public string? CustomRuleSetName { get; set; }
+    /// <summary>Who is running this game, when that is someone other than the member who entered it.</summary>
+    public string? HostName { get; set; }
+    public Guid? GameDayId { get; set; }
+    public GameDay? GameDay { get; set; }
     public List<SessionAttendance> Attendances { get; set; } = [];
     public List<EventPhoto> Photos { get; set; } = [];
+
+    string? IOwnedResource.OwnerUserId => CreatedByUserId;
+}
+
+/// <summary>
+/// A gathering at one place and time. Games posted onto it keep their own RSVP
+/// and must stay inside this start and end.
+/// </summary>
+public class GameDay : IOwnedResource
+{
+    public Guid Id { get; set; }
+    public DateTime ScheduledAt { get; set; }
+    public DateTime EndsAt { get; set; }
+    public string? Title { get; set; }
+    public string? Notes { get; set; }
+    public string? Venue { get; set; }
+    public string? Address { get; set; }
+    public string? OnlineLink { get; set; }
+    public string? LocationNotes { get; set; }
+    public string CreatedByUserId { get; set; } = "";
+    public ApplicationUser? CreatedBy { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public bool IsPublished { get; set; } = true;
+    public bool IsCancelled { get; set; }
+    public DateTime? CancelledUtc { get; set; }
+    public string? CancelledByUserId { get; set; }
+    public string? CancellationReason { get; set; }
+    public Guid? SeriesKey { get; set; }
+    public List<PlaySession> Games { get; set; } = [];
 
     string? IOwnedResource.OwnerUserId => CreatedByUserId;
 }

@@ -7,6 +7,7 @@ using Microsoft.OpenApi;
 using OBWC.Api.Data.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
+DatabaseConfiguration.UseProductionSqlServerForDevelopment(builder.Configuration, builder.Environment);
 ValidateConfiguration(builder);
 
 var jwt = builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();

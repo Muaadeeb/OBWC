@@ -1,23 +1,28 @@
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">Reschedule event</MudText>
+        <MudText Typo="Typo.h6">Reschedule @Noun</MudText>
     </TitleContent>
     <DialogContent>
         <MudText Typo="Typo.subtitle2" Class="mb-1">@EventTitle</MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3 d-block">
             Current: @ClubTime.FormatLongDate(CurrentStart) · @ClubTime.FormatTimeRange(CurrentStart, CurrentEnd)
         </MudText>
-        <MudGrid>
-            <MudItem xs="12" sm="6">
-                <MudDatePicker @bind-Date="_date" Label="New date" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" />
-            </MudItem>
-            <MudItem xs="12" sm="3">
-                <MudTimePicker @bind-Time="_startTime" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" AmPm="true" />
-            </MudItem>
-            <MudItem xs="12" sm="3">
-                <MudTimePicker @bind-Time="_endTime" Label="End (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" Clearable="true" AmPm="true" />
-            </MudItem>
-        </MudGrid>
+        <MudForm @ref="_form">
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_date" Label="New date" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true"
+                                   Validation="@(new Func<DateTime?, string?>(ValidateDate))" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudTimePicker @bind-Time="_startTime" @bind-Time:after="SyncTimes" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" AmPm="true"
+                                   Validation="@(new Func<TimeSpan?, string?>(ValidateStart))" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudTimePicker @bind-Time="_endTime" @bind-Time:after="SyncTimes" Label="End (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" Editable="true" Clearable="@(!RequireEnd)" AmPm="true"
+                                   Validation="@(new Func<TimeSpan?, string?>(ValidateEnd))" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
         @if (HasSeries)
         {
             <MudCheckBox T="bool" @bind-Value="_entireSeries" Color="Color.Warning" Class="mt-3"
@@ -32,7 +37,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Warning" Variant="Variant.Filled" OnClick="Submit">Reschedule</MudButton>
+        <MudButton Color="Color.Warning" Variant="Variant.Filled" OnClick="SubmitAsync">Reschedule</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -42,12 +47,16 @@
     [Parameter] public DateTimeOffset CurrentStart { get; set; }
     [Parameter] public DateTimeOffset? CurrentEnd { get; set; }
     [Parameter] public bool HasSeries { get; set; }
+    [Parameter] public string Noun { get; set; } = "game";
+    [Parameter] public bool RequireEnd { get; set; }
 
     private DateTime? _date;
     private TimeSpan? _startTime;
     private TimeSpan? _endTime;
     private bool _entireSeries;
     private bool _notify = true;
+    private MudForm _form = null!;
+    private bool _attempted;
 
     protected override void OnParametersSet()
     {
@@ -71,10 +80,34 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    private void Submit()
+    private async Task SyncTimes()
     {
-        if (_date is null || _startTime is null)
+        if (_attempted)
+            await _form.ValidateAsync();
+    }
+
+    private string? ValidateDate(DateTime? date) =>
+        date is null ? "Enter a date." : null;
+
+    private string? ValidateStart(TimeSpan? start) =>
+        start is null ? "Enter a start time." : null;
+
+    private string? ValidateEnd(TimeSpan? end)
+    {
+        if (end is not null || !RequireEnd)
+            return null;
+        return _startTime is null
+            ? "A game day needs a start and an end."
+            : "Enter an end time.";
+    }
+
+    private async Task SubmitAsync()
+    {
+        _attempted = true;
+        await _form.ValidateAsync();
+        if (!_form.IsValid || _date is null || _startTime is null)
             return;
+
         var newStart = ClubTime.FromClubWallClock(_date.Value, _startTime.Value);
         DateTimeOffset? newEnd = null;
         if (_endTime is TimeSpan endTime)

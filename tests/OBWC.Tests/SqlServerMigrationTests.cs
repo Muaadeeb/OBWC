@@ -38,6 +38,42 @@ public class SqlServerMigrationTests
     }
 
     [Fact]
+    public void Development_reads_the_sql_server_connection_from_the_production_file()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"obwc-dev-sql-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var connection = "Data Source=sql1004.site4now.net;Initial Catalog=db_example;User Id=user;Password=not-a-real-password;TrustServerCertificate=True";
+        File.WriteAllText(
+            Path.Combine(directory, "appsettings.Production.json"),
+            $$"""
+            {
+              "ConnectionStrings": { "DefaultConnection": "{{connection}}" },
+              "Jwt": { "Key": "this-must-not-be-copied" }
+            }
+            """);
+
+        try
+        {
+            var environment = new StubEnvironment("Development") { ContentRootPath = directory };
+            var builder = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Database:Provider"] = DatabaseConfiguration.SqliteProvider,
+                ["ConnectionStrings:DefaultConnection"] = "Data Source=App_Data/obwc.db"
+            });
+            DatabaseConfiguration.UseProductionSqlServerForDevelopment(builder, environment);
+            var configuration = builder.Build();
+
+            Assert.Equal(DatabaseConfiguration.SqlServerProvider, DatabaseConfiguration.GetProvider(configuration, environment));
+            Assert.Equal(connection, configuration.GetConnectionString("DefaultConnection"));
+            Assert.Null(configuration["Jwt:Key"]);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Sql_server_migrations_match_the_current_model_and_are_not_the_sqlite_set()
     {
         using var db = CreateSqlServerContext();

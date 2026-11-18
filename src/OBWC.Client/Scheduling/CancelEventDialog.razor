@@ -1,11 +1,13 @@
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">Cancel event</MudText>
+        <MudText Typo="Typo.h6">Cancel @Noun</MudText>
     </TitleContent>
     <DialogContent>
         <MudText Typo="Typo.subtitle2" Class="mb-2">@EventTitle</MudText>
         <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3" Variant="Variant.Outlined">
-            RSVP and check-in will close. The event stays on the calendar as cancelled.
+            @(CancelsGames
+                ? "This game day stays on the calendar as cancelled, and the games on it are cancelled too."
+                : "RSVP and check-in will close. The game stays on the calendar as cancelled.")
         </MudAlert>
         <MudTextField @bind-Value="_reason" Label="Reason (optional)" Variant="Variant.Outlined" Lines="2"
                       HelperText="Shown on the calendar and in the email to people who replied." />
@@ -18,8 +20,8 @@
                      Label="Email Going / Maybe / Waitlist" />
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Keep event</MudButton>
-        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Submit">Cancel event</MudButton>
+        <MudButton OnClick="Cancel">Keep @Noun</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Submit">Cancel @Noun</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -27,6 +29,8 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
     [Parameter] public string EventTitle { get; set; } = "Club game";
     [Parameter] public bool HasSeries { get; set; }
+    [Parameter] public string Noun { get; set; } = "game";
+    [Parameter] public bool CancelsGames { get; set; }
 
     private string _reason = "";
     private bool _entireSeries;

@@ -1,0 +1,253 @@
+@page "/calendar"
+@using System.Globalization
+@inject ScheduleApi Schedule
+@inject ClubApi Club
+@inject NavigationManager Nav
+
+<PageTitle>Calendar · OBWC</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2 flex-wrap">
+    <h1 class="mud-typography mud-typography-h4 mb-0">Calendar</h1>
+    <MudSpacer />
+    <MudButton Size="Size.Small" Variant="Variant.Outlined" Href="/schedule" StartIcon="@Icons.Material.Filled.EventNote">Game schedule</MudButton>
+</MudStack>
+<p class="lede">Events, game days, and games. An event is a convention. Times are Central Time (CT).</p>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-3 flex-wrap">
+    <MudChip T="string" Size="Size.Small" Color="Color.Info" Label="true">Event</MudChip>
+    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Label="true">Game day</MudChip>
+    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Label="true">Game</MudChip>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Class="mb-2" />
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error" Class="mb-2">@_error</MudAlert>
+}
+
+<MudCalendar T="ClubCalItem"
+             Items="_items"
+             @bind-CurrentDay="_day"
+             DateRangeChanged="OnRangeChanged"
+             ItemClicked="Open"
+             Culture="_culture"
+             FirstDayOfWeek="DayOfWeek.Sunday"
+             MinDate="_minDay"
+             MaxDate="_maxDay"
+             ShowTodayButton="true"
+             ShowWorkWeek="false"
+             Use24HourClock="false"
+             ShowCurrentTime="true"
+             Outlined="true"
+             Elevation="0"
+             ButtonVariant="Variant.Outlined"
+             MonthCellMinHeight="120"
+             DayStartTime="_dayStart"
+             DayItemMinHeight="28">
+    <CellTemplate>
+        <div class="mud-cal-cell-template @(context.Cancelled ? "cal-item-cancelled" : null)" title="@context.Detail">
+            <MudChip T="string" Size="Size.Small" Label="true" Color="@context.ChipColor"
+                     Variant="@(context.Cancelled ? Variant.Outlined : Variant.Filled)" Class="ma-0 cal-chip">@context.Text</MudChip>
+        </div>
+    </CellTemplate>
+</MudCalendar>
+
+@if (!_loading && string.IsNullOrEmpty(_error) && _loaded && _items.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">Nothing is scheduled in this view.</MudAlert>
+}
+
+@code {
+    private static readonly CultureInfo _culture = CultureInfo.GetCultureInfo("en-US");
+    private static readonly DateTime _minDay = new(2000, 1, 1);
+    private static readonly DateTime _maxDay = new(2100, 12, 31);
+    private static readonly TimeOnly _dayStart = new(8, 0);
+
+    private DateTime _day = ClubTime.ClubToday();
+    private bool _loading = true;
+    private bool _loaded;
+    private string? _error;
+    private int _load;
+    private List<ClubCalItem> _items = [];
+
+    private async Task OnRangeChanged(DateRange range)
+    {
+        if (range.Start is null || range.End is null)
+            return;
+
+        var start = range.Start.Value;
+        var end = range.End.Value;
+        if (end < start)
+            (start, end) = (end, start);
+
+        var version = ++_load;
+        _loading = true;
+        _error = null;
+        try
+        {
+            var months = Months(start, end).ToList();
+            var gameTasks = months.Select(month => Schedule.ListAsync(month.Year, month.Month)).ToList();
+            var dayTasks = months.Select(month => Schedule.ListGameDaysAsync(month.Year, month.Month)).ToList();
+            var conventionsTask = Club.GetConventionsAsync();
+            await Task.WhenAll(gameTasks.Cast<Task>().Concat(dayTasks).Append(conventionsTask));
+            if (version != _load)
+                return;
+
+            var items = new List<ClubCalItem>();
+            foreach (var ev in await conventionsTask)
+                AddConvention(items, ev, start, end);
+
+            var seenDays = new HashSet<Guid>();
+            foreach (var task in dayTasks)
+            {
+                foreach (var day in await task)
+                {
+                    if (!seenDays.Add(day.Id))
+                        continue;
+                    var span = Span(day.ScheduledAt, day.EndsAt);
+                    if (!Hits(span.Start, span.End, start, end))
+                        continue;
+                    items.Add(Item("Game day", string.IsNullOrWhiteSpace(day.Title) ? "Game day" : day.Title.Trim(), Color.Secondary, "/schedule", span, false, day.LocationDisplay, day.IsCancelled, !day.IsPublished, ClubTime.FormatTimeRange(day.ScheduledAt, day.EndsAt)));
+                }
+            }
+
+            var seenGames = new HashSet<Guid>();
+            foreach (var task in gameTasks)
+            {
+                foreach (var game in await task)
+                {
+                    if (!seenGames.Add(game.Id))
+                        continue;
+                    var span = Span(game.ScheduledAt, game.EndsAt);
+                    if (!Hits(span.Start, span.End, start, end))
+                        continue;
+                    var when = ClubTime.FormatTimeRange(game.ScheduledAt, game.EndsAt);
+                    if (!string.IsNullOrWhiteSpace(game.HostName))
+                        when += $" · Host: {game.HostName.Trim()}";
+                    items.Add(Item("Game", string.IsNullOrWhiteSpace(game.Title) ? "Club game" : game.Title.Trim(), Color.Primary, "/schedule", span, false, game.LocationDisplay, game.IsCancelled, !game.IsPublished, when));
+                }
+            }
+
+            _items = items;
+            _loaded = true;
+        }
+        catch (Exception ex) when (IsLoadError(ex))
+        {
+            if (version != _load)
+                return;
+            var root = ex is AggregateException agg
+                ? agg.Flatten().InnerExceptions.OfType<ClubApiException>().FirstOrDefault() ?? agg.GetBaseException()
+                : ex;
+            _error = root is ClubApiException api ? api.Message : "The calendar could not be loaded.";
+            _items = [];
+            _loaded = true;
+        }
+        finally
+        {
+            if (version == _load)
+                _loading = false;
+        }
+    }
+
+    private static void AddConvention(List<ClubCalItem> items, ConventionDto ev, DateTime rangeStart, DateTime rangeEnd)
+    {
+        if (ev.StartsOn is null && ev.EndsOn is null)
+            return;
+        var first = ev.StartsOn ?? ev.EndsOn!.Value;
+        var last = ev.EndsOn ?? first;
+        if (last < first)
+            last = first;
+
+        var start = first.ToDateTime(TimeOnly.MinValue);
+        var end = last.ToDateTime(new TimeOnly(23, 59));
+        if (!Hits(start, end, rangeStart, rangeEnd))
+            return;
+
+        var place = string.IsNullOrWhiteSpace(ev.LocationText) ? null : ev.LocationText.Trim();
+        items.Add(Item("Event", ev.Name.Trim(), Color.Info, "/conventions", (start, end), true, place, false, false, place));
+    }
+
+    private static ClubCalItem Item(
+        string kind,
+        string title,
+        Color color,
+        string href,
+        (DateTime Start, DateTime End) span,
+        bool allDay,
+        string? place,
+        bool cancelled,
+        bool draft,
+        string? when)
+    {
+        var text = allDay ? $"{kind}: {title}" : $"{span.Start.ToString("h:mm tt", _culture)} · {kind}: {title}";
+        if (draft)
+            text += " · Draft";
+        if (cancelled)
+            text += " · Cancelled";
+
+        var detail = text;
+        if (!string.IsNullOrWhiteSpace(when))
+            detail += $" · {when}";
+        if (!string.IsNullOrWhiteSpace(place) && !string.Equals(place.Trim(), when?.Trim(), StringComparison.Ordinal))
+            detail += $" · {place.Trim()}";
+
+        return new ClubCalItem
+        {
+            Start = span.Start,
+            End = span.End,
+            AllDay = allDay,
+            Text = text,
+            Detail = detail,
+            ChipColor = color,
+            Href = href,
+            Cancelled = cancelled
+        };
+    }
+
+    private void Open(ClubCalItem item) => Nav.NavigateTo(item.Href);
+
+    private static (DateTime Start, DateTime End) Span(DateTimeOffset start, DateTimeOffset? end)
+    {
+        var from = Wall(start);
+        var to = end is null ? from.AddHours(1) : Wall(end.Value);
+        if (to <= from)
+            to = from.AddHours(1);
+        return (from, to);
+    }
+
+    private static DateTime Wall(DateTimeOffset instant)
+    {
+        var local = ClubTime.ToClub(instant).DateTime;
+        return DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
+    }
+
+    private static bool IsLoadError(Exception ex) =>
+        ex is ClubApiException or HttpRequestException ||
+        (ex is AggregateException agg && agg.Flatten().InnerExceptions.All(IsLoadError));
+
+    private static bool Hits(DateTime start, DateTime end, DateTime rangeStart, DateTime rangeEnd) =>
+        start.Date <= rangeEnd.Date && end.Date >= rangeStart.Date;
+
+    private static IEnumerable<(int Year, int Month)> Months(DateTime start, DateTime end)
+    {
+        var cursor = new DateTime(start.Year, start.Month, 1);
+        var last = new DateTime(end.Year, end.Month, 1);
+        while (cursor <= last)
+        {
+            if (cursor.Year is >= 2000 and <= 2100)
+                yield return (cursor.Year, cursor.Month);
+            cursor = cursor.AddMonths(1);
+        }
+    }
+
+    public sealed class ClubCalItem : CalendarItem
+    {
+        public string Detail { get; set; } = "";
+        public Color ChipColor { get; set; } = Color.Primary;
+        public string Href { get; set; } = "/schedule";
+        public bool Cancelled { get; set; }
+    }
+}

@@ -1,0 +1,182 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Add a game</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle2" Class="mb-1">@(string.IsNullOrWhiteSpace(DayTitle) ? "Game day" : DayTitle)</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3 d-block">
+            @ClubTime.FormatLongDate(DayStart) · @ClubTime.FormatTimeRange(DayStart, DayEnd).
+            Leave both table times blank to use the whole game day.
+        </MudText>
+        <MudForm @ref="_form">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Validation="@(new Func<string, string?>(ValidateTitle))" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_host" Label="Host" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  MaxLength="200" HelperText="Who is running this game." />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudDatePicker @bind-Date="_date" @bind-Date:after="SyncTimes" Label="Table date" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Validation="@(new Func<DateTime?, string?>(ValidateDate))" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudTimePicker @bind-Time="_start" @bind-Time:after="SyncTimes" Label="Start (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm="true" Clearable="true"
+                                   Validation="@(new Func<TimeSpan?, string?>(ValidateStart))" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudTimePicker @bind-Time="_end" @bind-Time:after="SyncTimes" Label="End (CT)" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm="true" Clearable="true"
+                                   Validation="@(new Func<TimeSpan?, string?>(ValidateEnd))" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <RuleSetField @bind-Value="_ruleSetName" RuleSets="RuleSets" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudNumericField T="int?" @bind-Value="_cap" Label="Player cap (Going)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Clearable="true"
+                                     Validation="@(new Func<int?, string?>(ValidateCap))" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_notes" Label="Notes" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudCheckBox T="bool" @bind-Value="_published" Label="Publish to the public calendar" Color="Color.Primary" />
+                    <MudCheckBox T="bool" @bind-Value="_allowRsvp" Label="Allow player RSVP" Color="Color.Secondary" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Add game</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private const string BothTimes = "Enter both table times, or leave both blank to use the whole game day.";
+    private const string InsideDay = "Table times must stay inside the game day.";
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string? DayTitle { get; set; }
+    [Parameter] public DateTimeOffset DayStart { get; set; }
+    [Parameter] public DateTimeOffset DayEnd { get; set; }
+    [Parameter] public IReadOnlyList<RuleSetDto> RuleSets { get; set; } = [];
+
+    private MudForm _form = null!;
+    private bool _attempted;
+    private string _title = "";
+    private string _host = "";
+    private DateTime? _date;
+    private TimeSpan? _start;
+    private TimeSpan? _end;
+    private int? _cap;
+    private string? _ruleSetName;
+    private string _notes = "";
+    private bool _published = true;
+    private bool _allowRsvp = true;
+
+    protected override void OnParametersSet()
+    {
+        _date ??= ClubTime.ToClub(DayStart).DateTime.Date;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SyncTimes()
+    {
+        if (_attempted)
+            await _form.ValidateAsync();
+    }
+
+    private async Task Submit()
+    {
+        _attempted = true;
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        var follow = _start is null && _end is null;
+        DateTimeOffset? start = null;
+        DateTimeOffset? end = null;
+        if (!follow && _date is DateTime date && _start is TimeSpan startTime && _end is TimeSpan endTime)
+            (start, end) = TableWindow(date, startTime, endTime);
+
+        MudDialog.Close(DialogResult.Ok(new Result(
+            _title.Trim(),
+            string.IsNullOrWhiteSpace(_host) ? null : _host.Trim(),
+            start,
+            end,
+            follow,
+            string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim(),
+            _cap,
+            string.IsNullOrWhiteSpace(_ruleSetName) ? null : _ruleSetName.Trim(),
+            _published,
+            _allowRsvp)));
+    }
+
+    private string? ValidateTitle(string title) =>
+        string.IsNullOrWhiteSpace(title) ? "Enter a title." : null;
+
+    private string? ValidateCap(int? cap) =>
+        cap is int value && value < 1 ? "Player cap must be at least 1, or leave it blank." : null;
+
+    private string? ValidateDate(DateTime? date)
+    {
+        if (_start is null && _end is null)
+            return null;
+        if (date is null)
+            return BothTimes;
+        if (_start is null || _end is null)
+            return null;
+
+        var dayStart = ClubTime.ToClub(DayStart).Date;
+        var dayEnd = ClubTime.ToClub(DayEnd).Date;
+        return date.Value.Date < dayStart || date.Value.Date > dayEnd ? InsideDay : null;
+    }
+
+    private string? ValidateStart(TimeSpan? start)
+    {
+        if (start is null)
+            return _end is null ? null : BothTimes;
+        if (_date is null || _end is null)
+            return null;
+
+        var (tableStart, _) = TableWindow(_date.Value, start.Value, _end.Value);
+        return tableStart < DayStart || tableStart > DayEnd ? InsideDay : null;
+    }
+
+    private string? ValidateEnd(TimeSpan? end)
+    {
+        if (end is null)
+            return _start is null ? null : BothTimes;
+        if (_date is null || _start is null)
+            return null;
+
+        var (tableStart, tableEnd) = TableWindow(_date.Value, _start.Value, end.Value);
+        if (tableEnd < tableStart)
+            return "End time must be after the start time.";
+        return tableEnd < DayStart || tableEnd > DayEnd ? InsideDay : null;
+    }
+
+    private static (DateTimeOffset Start, DateTimeOffset End) TableWindow(DateTime date, TimeSpan start, TimeSpan end)
+    {
+        var startAt = ClubTime.FromClubWallClock(date, start);
+        var endDate = date.Date;
+        if (end < start)
+            endDate = endDate.AddDays(1);
+        return (startAt, ClubTime.FromClubWallClock(endDate, end));
+    }
+
+    public sealed record Result(
+        string Title,
+        string? HostName,
+        DateTimeOffset? Start,
+        DateTimeOffset? End,
+        bool FollowGameDayTimes,
+        string? Notes,
+        int? PlayerCap,
+        string? RuleSetName,
+        bool Published,
+        bool AllowRsvp);
+}

@@ -11,10 +11,40 @@ public static class DatabaseConfiguration
     public const string SqliteMigrationsNamespace = "OBWC.Api.Data.Migrations";
     public const string SqlServerMigrationsNamespace = "OBWC.Api.Data.SqlServerMigrations";
 
+    /// <summary>
+    /// Development uses the same SQL Server database as production. The connection string
+    /// stays in the gitignored production file and is not copied into a committed setting.
+    /// </summary>
+    public static void UseProductionSqlServerForDevelopment(IConfigurationBuilder configuration, IHostEnvironment environment)
+    {
+        if (!environment.IsDevelopment())
+            return;
+
+        var path = Path.Combine(environment.ContentRootPath, "appsettings.Production.json");
+        if (!File.Exists(path))
+        {
+            throw new InvalidOperationException(
+                "Local development uses the production SQL Server database. appsettings.Production.json is missing, so the connection string is not available.");
+        }
+
+        var production = new ConfigurationBuilder().AddJsonFile(path, optional: false).Build();
+        var connection = production.GetConnectionString("DefaultConnection");
+        if (!IsUsableSqlServerConnection(connection))
+        {
+            throw new InvalidOperationException(
+                "Local development uses the production SQL Server database. The connection string in appsettings.Production.json is not a usable SQL Server connection.");
+        }
+
+        configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Database:Provider"] = SqlServerProvider,
+            ["ConnectionStrings:DefaultConnection"] = connection
+        });
+    }
+
     public static string GetProvider(IConfiguration configuration, IHostEnvironment? environment = null)
     {
-        // The live site is SQL Server. appsettings.json keeps SQLite so a local
-        // Development run still works when the production file is absent.
+        // A Production host is SQL Server even when the base file still says SQLite.
         if (environment?.IsProduction() == true)
             return SqlServerProvider;
 

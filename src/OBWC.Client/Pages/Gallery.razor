@@ -20,11 +20,13 @@ else if (_gallery is null || _gallery.Photos.Count == 0)
 }
 else
 {
-    <div class="link-grid">
+    <div class="gallery-list">
         @foreach (var photo in _gallery.Photos)
         {
-            <figure class="catalog-card">
-                <img class="gallery-photo" src="@Origin.Absolute(photo.Url)" alt="@photo.Caption" />
+            <figure class="catalog-card gallery-figure">
+                <div class="gallery-photo-frame">
+                    <img class="gallery-photo-full" src="@Origin.Absolute(photo.Url)" alt="@photo.Caption" />
+                </div>
                 <figcaption>
                     <strong>@photo.Caption</strong><br />
                     @photo.PublicEventName<br />

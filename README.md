@@ -29,7 +29,7 @@ A GM can change only events they created, and can upload photos only on those ev
 - **Member** — confirmed account. Schedules games they own, RSVPs, and reads member documents.
 - **GM** — add-on role for a Member, Admin, or SuperAdmin. Does not grant edit rights to someone else's events or photos. A GM can create and edit venues.
 - **Admin** — maintains officers, the gallery, conventions, area groups, documents, venues, and every event and event photo. Assigns Member, Admin, and GM.
-- **SuperAdmin** — full rights. Assigned only when the account email matches `Authorization:SuperAdminEmail`. The UI cannot grant it. The default in `appsettings.json` is `timothyingledue@gmail.com`. No password for that address is stored; Timothy registers the account himself. Development overrides the setting to the sample admin so that sample account is SuperAdmin only on a dev machine.
+- **SuperAdmin** — full rights. Assigned only when the account email matches `Authorization:SuperAdminEmail`. The UI cannot grant it. The default in `appsettings.json` is `timothyingledue@gmail.com`. No password for that address is stored; Timothy registers the account himself.
 
 ## Database
 
@@ -37,10 +37,10 @@ A GM can change only events they created, and can upload photos only on those ev
 
 | Provider | When | Connection |
 | --- | --- | --- |
-| `Sqlite` | Local development and tests. | `Data Source=App_Data/obwc.db` |
-| `SqlServer` | Production, including SmarterASP.NET. Also any time `Database:Provider` is `SqlServer`. | `ConnectionStrings:DefaultConnection` from the environment or from an uncommitted `appsettings.Production.json`. |
+| `Sqlite` | Automated tests, and the checked-in default in `appsettings.json`. | `Data Source=App_Data/obwc.db` |
+| `SqlServer` | Local development and production, including SmarterASP.NET. | `ConnectionStrings:DefaultConnection` from the gitignored `appsettings.Production.json`. |
 
-On startup outside the test host, `App:ApplyMigrations` (default `true`) creates the database and applies the migrations for the active provider. In Development that is the SQLite file under `App_Data/`, which is gitignored.
+Local Development copies only that connection string out of `appsettings.Production.json`. It does not copy the production JWT key, SMTP password, or site URLs. On startup outside the test host, `App:ApplyMigrations` (default `true`) applies the migrations for the active provider. A Development start therefore applies pending SQL Server migrations to the live database. Sample accounts and SAMPLE events are not seeded onto that database.
 
 SQLite migrations live in `src/OBWC.Api/Data/Migrations`. SQL Server migrations live in `src/OBWC.Api/Data/SqlServerMigrations`. Both are compiled. The API applies only the set that matches the provider. An idempotent script for the SQL Server set is in `deploy/sql/obwc-sqlserver.sql`.
 
@@ -63,7 +63,7 @@ dotnet user-secrets set "Smtp:Password" "..." --project src/OBWC.Api
 dotnet user-secrets set "Smtp:FromAddress" "club@example.com" --project src/OBWC.Api
 ```
 
-The JWT key must be at least 32 characters. `appsettings.Development.json` sets `Authorization:SuperAdminEmail` to the sample admin, which overrides the Timothy address while the environment is Development. User-secrets override that file. `dotnet publish` leaves `appsettings.Development.json`, `appsettings.Testing.json`, and `appsettings.Production.example.json` out of the output, and it does not copy `appsettings.Production.json`. A published site uses `timothyingledue@gmail.com` unless `Authorization__SuperAdminEmail` replaces it. On each sign-in the API keeps SuperAdmin only on the configured email and removes it from any other account.
+The JWT key must be at least 32 characters. Development keeps the local JWT key and does not override `Authorization:SuperAdminEmail`, so a local start against the live database leaves SuperAdmin on `timothyingledue@gmail.com`. User-secrets override the settings files. `dotnet publish` leaves `appsettings.Development.json`, `appsettings.Testing.json`, and `appsettings.Production.example.json` out of the output, and it does not copy `appsettings.Production.json`. A published site uses `timothyingledue@gmail.com` unless `Authorization__SuperAdminEmail` replaces it. On each sign-in the API keeps SuperAdmin only on the configured email and removes it from any other account.
 
 In Development, if SMTP is empty, confirmation and reset links are written to the API log and listed at `/dev/mail` on the client (the API route is `GET /api/dev/mail` and returns 404 outside Development).
 
@@ -77,12 +77,7 @@ dotnet run --project src/OBWC.Api
 
 Site: `http://localhost:5150` (Swagger in Development at `/swagger`).
 
-Development sample accounts (not club members, password `Sample-Dev-Only-1!` from `Seed:SamplePassword`):
-
-- `sample.member@obwc.local` — Member. Owns the SAMPLE events.
-- `sample.admin@obwc.local` — Admin, and SuperAdmin only because Development sets `Authorization:SuperAdminEmail` to this address. Timothy's address is not given this password.
-
-SAMPLE events are seeded only in Development and are titled `SAMPLE — ...`. They are not real club nights. Change `Authorization:SuperAdminEmail` to the real SuperAdmin before anyone else uses the machine.
+Sign in with a real account on the live database. The sample accounts (`sample.member@obwc.local`, `sample.admin@obwc.local`, `sample.guest@obwc.local`) are not created when Development is using SQL Server.
 
 To confirm a new account without SMTP, open **Dev mail** in the menu and use the link.
 
@@ -114,7 +109,7 @@ Server policies enforce these rules. Hiding a button is not the check.
 
 Uploads go to `Uploads:Path` (default `App_Data/uploads`), a path relative to the API content root or an absolute path. The API checks the extension, the file signature, and `Uploads:MaxUploadBytes` (default 10 MB). Nothing secret is written into the file name. The gallery also stops at `Uploads:MaxGalleryPhotos` (default 100).
 
-SAMPLE users and SAMPLE events are added only when the environment is Development.
+SAMPLE users and SAMPLE events are added only for a Development run that is still on SQLite. A Development run on SQL Server does not add them.
 
 ## Deploy
 

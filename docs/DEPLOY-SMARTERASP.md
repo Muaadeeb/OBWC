@@ -78,7 +78,7 @@ The API reads `ConnectionStrings:DefaultConnection`. Environment variables overr
    | `Cors__AllowedOrigins__0` | `https://omahabeachwc.com` |
    | `Cors__AllowedOrigins__1` | `https://www.omahabeachwc.com` |
 
-   Production always uses the SQL Server provider, even though `appsettings.json` says `Sqlite` for local development. `Database__Provider=SqlServer` is optional.
+   Production always uses the SQL Server provider, even though `appsettings.json` says `Sqlite`. Local Development also uses this SQL Server database, taking the connection string from the gitignored `appsettings.Production.json`. `Database__Provider=SqlServer` is optional in Production.
 
 2. **Server-side `appsettings.Production.json`.** Copy `src/OBWC.Api/appsettings.Production.example.json` to the API folder on the server, next to `OBWC.Api.dll`, and replace the placeholders. That filename is gitignored. `dotnet publish` does not copy it. Do not add the filled-in file to the repository.
 
@@ -145,4 +145,4 @@ dotnet ef migrations script --idempotent --project src/OBWC.Api --output deploy/
 
 `migrations script` replaces the file. Put the `SET QUOTED_IDENTIFIER ON` batch from the current script back at the top. Filtered indexes fail when that setting is off.
 
-SQLite migrations for local development stay in `src/OBWC.Api/Data/Migrations`. Leave `Database__Provider` unset (or set it to `Sqlite`) when adding those. Publish the API again so startup can apply the new SQL Server migration, or run `dotnet ef database update` with the connection string in the environment.
+SQLite migrations remain in `src/OBWC.Api/Data/Migrations` for the test host. Leave `Database__Provider` unset (or set it to `Sqlite`) when adding those. Local Development and production use the SQL Server migrations. Publish the API again so startup can apply a new SQL Server migration, or run `dotnet ef database update` with the connection string in the environment. A local Development start applies pending SQL Server migrations to the live database.

@@ -7,6 +7,9 @@
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     <!-- The loader imports ./dotnet.js. A fingerprinted name 404s on the hosted site and the spinner never finishes. -->
     <WasmFingerprintDotnetJs>false</WasmFingerprintDotnetJs>
+    <!-- A Debug gzip of dotnet.js can stay behind after the boot list changes. The browser then
+         requests assemblies that are gone and the integrity checks fail. Release still compresses. -->
+    <CompressionEnabled Condition="'$(Configuration)' == 'Debug'">false</CompressionEnabled>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <RootNamespace>OBWC.Client</RootNamespace>
   </PropertyGroup>
@@ -15,6 +18,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.14" PrivateAssets="all" />
+    <PackageReference Include="Heron.MudCalendar" Version="4.1.0" />
     <PackageReference Include="MudBlazor" Version="9.12.0" />
   </ItemGroup>
 

@@ -4,6 +4,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 {
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PlaySession> PlaySessions => Set<PlaySession>();
+    public DbSet<GameDay> GameDays => Set<GameDay>();
     public DbSet<SessionAttendance> SessionAttendances => Set<SessionAttendance>();
     public DbSet<RuleSet> RuleSets => Set<RuleSet>();
     public DbSet<RuleSetPlayer> RuleSetPlayers => Set<RuleSetPlayer>();
@@ -52,6 +53,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(session => session.CreatedByUserId).HasMaxLength(450).IsRequired();
             entity.Property(session => session.CancelledByUserId).HasMaxLength(450);
             entity.Property(session => session.CancellationReason).HasMaxLength(500);
+            entity.Property(session => session.CustomRuleSetName).HasMaxLength(200);
+            entity.Property(session => session.HostName).HasMaxLength(200);
             entity.Property(session => session.IsPublished).HasDefaultValue(true);
             entity.Property(session => session.AllowPlayerRsvp).HasDefaultValue(true);
             entity.Property(session => session.IsCancelled).HasDefaultValue(false);
@@ -65,6 +68,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(session => session.RuleSetId)
                 .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(session => session.GameDay)
+                .WithMany(day => day.Games)
+                .HasForeignKey(session => session.GameDayId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(session => session.GameDayId);
             entity.HasMany(session => session.Attendances)
                 .WithOne(row => row.PlaySession!)
                 .HasForeignKey(row => row.PlaySessionId)
@@ -73,6 +81,28 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithOne(photo => photo.PlaySession!)
                 .HasForeignKey(photo => photo.PlaySessionId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<GameDay>(entity =>
+        {
+            entity.ToTable("GameDays");
+            entity.Property(day => day.Title).HasMaxLength(160);
+            entity.Property(day => day.Notes).HasMaxLength(1000);
+            entity.Property(day => day.Venue).HasMaxLength(160);
+            entity.Property(day => day.Address).HasMaxLength(300);
+            entity.Property(day => day.OnlineLink).HasMaxLength(500);
+            entity.Property(day => day.LocationNotes).HasMaxLength(1000);
+            entity.Property(day => day.CreatedByUserId).HasMaxLength(450).IsRequired();
+            entity.Property(day => day.CancelledByUserId).HasMaxLength(450);
+            entity.Property(day => day.CancellationReason).HasMaxLength(500);
+            entity.Property(day => day.IsPublished).HasDefaultValue(true);
+            entity.Property(day => day.IsCancelled).HasDefaultValue(false);
+            entity.HasIndex(day => day.ScheduledAt);
+            entity.HasIndex(day => day.SeriesKey);
+            entity.HasOne(day => day.CreatedBy)
+                .WithMany()
+                .HasForeignKey(day => day.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<SessionAttendance>(entity =>

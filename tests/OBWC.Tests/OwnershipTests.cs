@@ -25,6 +25,12 @@ public class OwnershipTests(ApiFactory factory) : IClassFixture<ApiFactory>, IDi
         var anonymousCreate = await _api.Client.PostAsJsonAsync("/api/events", ApiTest.SampleEvent("Closed table", when));
         Assert.Equal(HttpStatusCode.Unauthorized, anonymousCreate.StatusCode);
 
+        var guest = await _api.RegisterAndLoginAsync("schedule-guest@obwc.test", "Schedule Guest", membership: null);
+        using var guestClient = _api.As(guest);
+        var guestCreate = await guestClient.PostAsJsonAsync("/api/events", ApiTest.SampleEvent("Guest table", when));
+        Assert.Equal(HttpStatusCode.Forbidden, guestCreate.StatusCode);
+        Assert.Contains("Only members may schedule a game.", await guestCreate.Content.ReadAsStringAsync());
+
         using var memberClient = _api.As(member);
         var created = await memberClient.PostAsJsonAsync("/api/events", ApiTest.SampleEvent("Friday Spearhead", when));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);

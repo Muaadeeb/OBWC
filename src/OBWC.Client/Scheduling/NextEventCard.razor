@@ -12,8 +12,8 @@ else
 {
     <article class="broadsheet">
         <header>
-            <p class="eyebrow">Next event</p>
-            <h2>@(string.IsNullOrWhiteSpace(_event.Title) ? "Club game" : _event.Title)</h2>
+            <p class="eyebrow">@(_event.ScheduleKind == "GameDay" ? "Next game day" : "Next game")</p>
+            <h2>@(string.IsNullOrWhiteSpace(_event.Title) ? (_event.ScheduleKind == "GameDay" ? "Game day" : "Club game") : _event.Title)</h2>
         </header>
         <dl>
             <dt>Location</dt>
@@ -21,7 +21,16 @@ else
             <dt>Date/Time</dt>
             <dd>@ClubTime.FormatLongDate(_event.ScheduledAt) · @ClubTime.FormatTimeRange(_event.ScheduledAt, _event.EndsAt)</dd>
             <dt>Points of contact</dt>
-            <dd>@_event.OwnerDisplayName@( _event.OwnerIsGm ? " (GM)" : "")</dd>
+            <dd>
+                @if (!string.IsNullOrWhiteSpace(_event.HostName))
+                {
+                    @_event.HostName <span>(host) · Scheduled by @_event.OwnerDisplayName@(_event.OwnerIsGm ? " (GM)" : "")</span>
+                }
+                else
+                {
+                    @_event.OwnerDisplayName@(_event.OwnerIsGm ? " (GM)" : "")
+                }
+            </dd>
             <dt>Games</dt>
             <dd>
                 @(_event.RuleSetName ?? "See the notes")

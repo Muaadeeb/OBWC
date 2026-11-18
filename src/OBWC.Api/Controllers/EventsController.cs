@@ -40,14 +40,8 @@ public class EventsController(ScheduleService schedule, IAuthorizationService au
     [AllowAnonymous]
     public async Task<ActionResult<CalendarEventDto>> Next(CancellationToken cancellationToken)
     {
-        var from = DateTime.UtcNow.AddHours(-12);
-        var sessions = await schedule.ListSessionsAsync(from, DateTime.UtcNow.AddDays(180), null, includeAllUnpublished: false, cancellationToken);
-        var now = DateTime.UtcNow;
-        var next = sessions.FirstOrDefault(session => !session.IsCancelled && (session.EndsAt ?? session.ScheduledAt) >= now);
-        if (next is null)
-            return NotFound();
-        var mapped = await schedule.MapManyAsync([next], CurrentUserId, IsElevated, cancellationToken);
-        return Ok(mapped[0]);
+        var next = await schedule.NextCardAsync(CurrentUserId, IsElevated, cancellationToken);
+        return next is null ? NotFound() : Ok(next);
     }
 
     [HttpGet("mine")]
@@ -70,7 +64,17 @@ public class EventsController(ScheduleService schedule, IAuthorizationService au
             includeAllUnpublished: false,
             cancellationToken);
         var mapped = await schedule.MapManyAsync(sessions, CurrentUserId, IsElevated, cancellationToken);
-        var ics = ScheduleService.BuildIcs("Omaha Beach Wargaming Club", "obwc", mapped);
+        var days = await schedule.ListGameDaysAsync(
+            DateTime.UtcNow.AddDays(-30),
+            DateTime.UtcNow.AddDays(180),
+            CurrentUserId,
+            includeAllUnpublished: false,
+            cancellationToken);
+        var mappedDays = await schedule.MapGameDaysAsync(days, CurrentUserId, IsElevated, cancellationToken);
+        var ics = ScheduleService.BuildIcs(
+            "Omaha Beach Wargaming Club",
+            "obwc",
+            mapped.Concat(mappedDays.Select(ScheduleService.ToCalendarEvent)).ToList());
         return File(Encoding.UTF8.GetBytes(ics), "text/calendar; charset=utf-8", "obwc-calendar.ics");
     }
 
@@ -86,11 +90,13 @@ public class EventsController(ScheduleService schedule, IAuthorizationService au
     }
 
     [HttpPost]
-    [Authorize(Policy = PolicyNames.Member)]
+    [Authorize]
     public async Task<ActionResult<CreateSeriesResultDto>> Create(CreateSessionRequest request, CancellationToken cancellationToken)
     {
         if (CurrentUserId is null)
             return Unauthorized();
+        if (!CanSeeMemberDetails)
+            return Forbidden("Only members may schedule a game.");
         var (ok, created, firstId, error) = await schedule.CreateWeeklySeriesAsync(request, CurrentUserId, cancellationToken);
         if (!ok || firstId is null)
             return Bad(error ?? "Could not schedule the game.");
@@ -209,6 +215,22 @@ public class EventsController(ScheduleService schedule, IAuthorizationService au
 
         var (ok, error) = await schedule.UndoCheckInAsync(id, target, CurrentUserId, managingSomeoneElse, cancellationToken);
         return ok ? NoContent() : Bad(error ?? "Could not undo check-in.");
+    }
+
+    [HttpPost("{id:guid}/detach")]
+    [Authorize(Policy = PolicyNames.Member)]
+    public async Task<IActionResult> Detach(Guid id, CancellationToken cancellationToken)
+    {
+        var session = await schedule.GetSessionAsync(id, cancellationToken);
+        if (session is null)
+            return NotFound();
+        if (session.GameDay is null)
+            return Bad("This game is not on a game day.");
+        var deny = await DenyUnlessOwnerOrAdminAsync(authorization, session.GameDay);
+        if (deny is not null)
+            return deny;
+        var (ok, error) = await schedule.DetachGameAsync(id, cancellationToken);
+        return ok ? NoContent() : Bad(error ?? "Could not take the game off the game day.");
     }
 
     [HttpGet("{id:guid}/roster")]

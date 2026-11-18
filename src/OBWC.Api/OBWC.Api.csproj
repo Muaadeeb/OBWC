@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>OBWC.Api</RootNamespace>
     <AspNetCoreHostingModel>OutOfProcess</AspNetCoreHostingModel>
+    <!-- Keep Debug from serving a stale gzip of the Blazor boot script. Release still compresses. -->
+    <CompressionEnabled Condition="'$(Configuration)' == 'Debug'">false</CompressionEnabled>
     <UserSecretsId>a7e3c1d4-6b28-4f9a-8c55-0e1d2b3a4f60</UserSecretsId>
   </PropertyGroup>
 

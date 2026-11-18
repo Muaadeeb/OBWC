@@ -163,6 +163,65 @@ h1, h2, h3, .mud-typography-h4, .mud-typography-h5, .mud-typography-h6 {
     background: var(--obwc-paper);
 }
 
+.gallery-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .75rem;
+    margin-top: 1rem;
+}
+
+.gallery-figure {
+    min-width: 0;
+}
+
+.gallery-photo-frame {
+    width: 100%;
+    max-height: 70vh;
+    overflow: auto;
+    background: var(--obwc-paper);
+}
+
+.gallery-photo-full {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: none;
+}
+
+.event-photo-frame {
+    max-width: 100%;
+    max-height: 70vh;
+    overflow: auto;
+    background: var(--obwc-paper);
+}
+
+.event-photo {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    height: auto;
+}
+
+.game-day-game-cancelled {
+    opacity: .75;
+}
+
+.game-day-game-draft .mud-expand-panel {
+    border-style: dashed;
+}
+
+.mud-cal-cell-template .cal-chip {
+    max-width: 100%;
+}
+
+.cal-item-cancelled {
+    opacity: .75;
+}
+
+.cal-item-cancelled .mud-chip {
+    text-decoration: line-through;
+}
+
 .broadsheet {
     background: var(--obwc-paper);
     color: var(--obwc-ink);

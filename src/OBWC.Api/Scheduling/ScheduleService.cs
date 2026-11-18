@@ -23,6 +23,9 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         string? locationNotes = null,
         int? playerCap = null,
         Guid? ruleSetId = null,
+        string? customRuleSetName = null,
+        Guid? gameDayId = null,
+        string? hostName = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(createdByUserId))
@@ -31,7 +34,13 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             return (false, null, "End time must be after the start time.");
         if (playerCap is int cap && cap < 1)
             return (false, null, "Player cap must be at least 1 (or blank for unlimited).");
-        if (ruleSetId is Guid ruleId && !await db.RuleSets.AnyAsync(ruleSet => ruleSet.Id == ruleId, cancellationToken))
+        var host = Clean(hostName);
+        if (host is not null && host.Length > 200)
+            return (false, null, "Host must be 200 characters or fewer.");
+        var customName = Clean(customRuleSetName);
+        if (customName is not null)
+            ruleSetId = null;
+        else if (ruleSetId is Guid ruleId && !await db.RuleSets.AnyAsync(ruleSet => ruleSet.Id == ruleId, cancellationToken))
             return (false, null, "That rule set is not on the club list.");
 
         var session = new PlaySession
@@ -47,23 +56,14 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             LocationNotes = Clean(locationNotes),
             PlayerCap = playerCap,
             RuleSetId = ruleSetId,
+            CustomRuleSetName = customName,
+            GameDayId = gameDayId,
+            HostName = host,
             CreatedByUserId = createdByUserId,
             CreatedAt = DateTime.UtcNow,
             IsPublished = isPublished,
             AllowPlayerRsvp = allowPlayerRsvp
         };
-
-        foreach (var userId in await MemberIdsAsync(cancellationToken))
-        {
-            session.Attendances.Add(new SessionAttendance
-            {
-                Id = Guid.NewGuid(),
-                PlaySessionId = session.Id,
-                UserId = userId,
-                Status = AttendanceStatus.Absent,
-                RsvpStatus = SessionRsvpStatus.Unknown
-            });
-        }
 
         db.PlaySessions.Add(session);
         await db.SaveChangesAsync(cancellationToken);
@@ -76,6 +76,16 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         CancellationToken cancellationToken = default)
     {
         var weeks = Math.Clamp(request.Weeks <= 0 ? 1 : request.Weeks, 1, 26);
+        if (request.GameDayId is Guid gameDayId)
+        {
+            if (weeks > 1)
+                return (false, 0, null, "Add a game to one game day at a time.");
+            return await CreateGameOnDayAsync(request, gameDayId, createdByUserId, cancellationToken);
+        }
+
+        var (ruleOk, ruleSetId, customRuleSetName, ruleError) = await ResolveRuleSetAsync(request.RuleSetId, request.RuleSetName, cancellationToken);
+        if (!ruleOk)
+            return (false, 0, null, ruleError);
         // A single night is not a series. SeriesKey is set only when more than one week is created.
         Guid? seriesKey = weeks > 1 ? Guid.NewGuid() : null;
         var created = 0;
@@ -94,7 +104,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
                 start, end, title, request.Notes, createdByUserId,
                 request.IsPublished, request.AllowPlayerRsvp,
                 request.Venue, request.Address, request.OnlineLink, request.LocationNotes,
-                request.PlayerCap, request.RuleSetId, cancellationToken);
+                request.PlayerCap, ruleSetId, customRuleSetName, null, request.HostName, cancellationToken);
             if (!ok || session is null)
             {
                 lastError = error;
@@ -117,6 +127,52 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             : (true, created, firstId, lastError);
     }
 
+    private async Task<(bool Ok, int Created, Guid? FirstSessionId, string? Error)> CreateGameOnDayAsync(
+        CreateSessionRequest request,
+        Guid gameDayId,
+        string createdByUserId,
+        CancellationToken cancellationToken)
+    {
+        var day = await db.GameDays.FirstOrDefaultAsync(item => item.Id == gameDayId, cancellationToken);
+        if (day is null)
+            return (false, 0, null, "That game day was not found.");
+        if (day.IsCancelled)
+            return (false, 0, null, "That game day was cancelled.");
+
+        DateTimeOffset start;
+        DateTimeOffset end;
+        if (request.FollowGameDayTimes)
+        {
+            start = AsOffset(day.ScheduledAt);
+            end = AsOffset(day.EndsAt);
+        }
+        else if (request.EndsAt is not DateTimeOffset requestedEnd)
+        {
+            return (false, 0, null, "A game on a game day needs a start and an end, or it uses the whole game day.");
+        }
+        else
+        {
+            start = request.ScheduledAt;
+            end = requestedEnd;
+            var outside = GameOutsideDay(start.UtcDateTime, end.UtcDateTime, day);
+            if (outside is not null)
+                return (false, 0, null, outside);
+        }
+
+        var (ruleOk, ruleSetId, customRuleSetName, ruleError) = await ResolveRuleSetAsync(request.RuleSetId, request.RuleSetName, cancellationToken);
+        if (!ruleOk)
+            return (false, 0, null, ruleError);
+
+        var (ok, session, error) = await CreateSessionAsync(
+            start, end, request.Title, request.Notes, createdByUserId,
+            request.IsPublished, request.AllowPlayerRsvp,
+            request.Venue, request.Address, request.OnlineLink, request.LocationNotes,
+            request.PlayerCap, ruleSetId, customRuleSetName, day.Id, request.HostName, cancellationToken);
+        return ok && session is not null
+            ? (true, 1, session.Id, null)
+            : (false, 0, null, error ?? "Could not add the game.");
+    }
+
     public async Task<List<PlaySession>> ListSessionsAsync(
         DateTime from,
         DateTime to,
@@ -127,6 +183,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         var query = db.PlaySessions.AsNoTracking()
             .Include(session => session.Attendances)
             .Include(session => session.RuleSet)
+            .Include(session => session.GameDay)
             .Where(session => session.ScheduledAt >= from && session.ScheduledAt <= to);
         if (!includeAllUnpublished)
         {
@@ -139,7 +196,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
     }
 
     public Task<PlaySession?> GetSessionAsync(Guid id, CancellationToken cancellationToken = default) =>
-        db.PlaySessions.Include(session => session.Attendances).Include(session => session.RuleSet)
+        db.PlaySessions.Include(session => session.Attendances).Include(session => session.RuleSet).Include(session => session.GameDay)
             .FirstOrDefaultAsync(session => session.Id == id, cancellationToken);
 
     public async Task<(bool Ok, string? Note, SessionRsvpStatus Status)> SetPlayerRsvpAsync(
@@ -176,7 +233,8 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
                 UserId = userId,
                 Status = AttendanceStatus.Absent
             };
-            session.Attendances.Add(row);
+            // A preset Guid key added only through the collection is treated as an existing row.
+            db.SessionAttendances.Add(row);
         }
 
         var wasGoingOrWait = row.RsvpStatus is SessionRsvpStatus.Going or SessionRsvpStatus.Waitlist;
@@ -208,8 +266,12 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
     {
         if (request.PlayerCap is int cap && cap < 1)
             return (false, "Player cap must be at least 1 (or blank for unlimited).");
-        if (request.RuleSetId is Guid ruleId && !await db.RuleSets.AnyAsync(ruleSet => ruleSet.Id == ruleId, cancellationToken))
-            return (false, "That rule set is not on the club list.");
+        var host = Clean(request.HostName);
+        if (host is not null && host.Length > 200)
+            return (false, "Host must be 200 characters or fewer.");
+        var (ruleOk, ruleSetId, customRuleSetName, ruleError) = await ResolveRuleSetAsync(request.RuleSetId, request.RuleSetName, cancellationToken);
+        if (!ruleOk)
+            return (false, ruleError);
 
         var session = await db.PlaySessions.Include(item => item.Attendances)
             .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
@@ -220,12 +282,18 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
 
         session.Title = Clean(request.Title);
         session.Notes = Clean(request.Notes);
-        session.Venue = Clean(request.Venue);
-        session.Address = Clean(request.Address);
-        session.OnlineLink = Clean(request.OnlineLink);
-        session.LocationNotes = Clean(request.LocationNotes);
+        if (session.GameDayId is null)
+        {
+            session.Venue = Clean(request.Venue);
+            session.Address = Clean(request.Address);
+            session.OnlineLink = Clean(request.OnlineLink);
+            session.LocationNotes = Clean(request.LocationNotes);
+        }
+
         session.PlayerCap = request.PlayerCap;
-        session.RuleSetId = request.RuleSetId;
+        session.RuleSetId = ruleSetId;
+        session.CustomRuleSetName = customRuleSetName;
+        session.HostName = host;
 
         if (request.PlayerCap is int newCap && newCap > 0)
         {
@@ -282,7 +350,8 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
                 UserId = targetUserId,
                 RsvpStatus = SessionRsvpStatus.Unknown
             };
-            session.Attendances.Add(row);
+            // A preset Guid key added only through the collection is treated as an existing row.
+            db.SessionAttendances.Add(row);
         }
 
         row.Status = AttendanceStatus.Present;
@@ -375,7 +444,8 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         if (newEnd is DateTimeOffset end && end < newStart)
             return (false, "End time must be after start.");
 
-        var root = await db.PlaySessions.FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
+        var root = await db.PlaySessions.Include(item => item.GameDay)
+            .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
         if (root is null)
             return (false, "Event not found.");
         if (root.IsCancelled)
@@ -386,24 +456,35 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         var targets = new List<PlaySession> { root };
         if (entireSeriesFollowing && root.SeriesKey is Guid seriesKey)
         {
-            targets = await db.PlaySessions
-                .Where(item => item.SeriesKey == seriesKey && item.ScheduledAt >= oldStart && !item.IsCancelled)
+            var rest = await db.PlaySessions.Include(item => item.GameDay)
+                .Where(item => item.SeriesKey == seriesKey && item.Id != root.Id && item.ScheduledAt >= oldStart && !item.IsCancelled)
                 .ToListAsync(cancellationToken);
+            targets.AddRange(rest);
         }
 
+        var proposed = new List<(PlaySession Session, DateTime Start, DateTime? End)>();
         foreach (var session in targets)
         {
-            if (session.Id == root.Id)
+            var startUtc = session.Id == root.Id ? newStart.UtcDateTime : session.ScheduledAt.Add(delta);
+            DateTime? endUtc = session.Id == root.Id
+                ? newEnd?.UtcDateTime
+                : session.EndsAt is DateTime existingEnd ? existingEnd.Add(delta) : null;
+            if (session.GameDay is not null)
             {
-                session.ScheduledAt = newStart.UtcDateTime;
-                session.EndsAt = newEnd?.UtcDateTime;
+                if (endUtc is null)
+                    return (false, "A game on a game day needs a start and an end inside the game day.");
+                var outside = GameOutsideDay(startUtc, endUtc.Value, session.GameDay);
+                if (outside is not null)
+                    return (false, outside);
             }
-            else
-            {
-                session.ScheduledAt = session.ScheduledAt.Add(delta);
-                if (session.EndsAt is DateTime existingEnd)
-                    session.EndsAt = existingEnd.Add(delta);
-            }
+
+            proposed.Add((session, startUtc, endUtc));
+        }
+
+        foreach (var (session, startUtc, endUtc) in proposed)
+        {
+            session.ScheduledAt = startUtc;
+            session.EndsAt = endUtc;
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -443,6 +524,8 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             .ToDictionaryAsync(user => user.Id, cancellationToken);
 
         return session.Attendances
+            .Where(row => row.RsvpStatus is SessionRsvpStatus.Going or SessionRsvpStatus.Maybe or SessionRsvpStatus.Waitlist
+                || row.Status == AttendanceStatus.Present)
             .Select(row =>
             {
                 users.TryGetValue(row.UserId, out var user);
@@ -477,42 +560,12 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             .ToList();
     }
 
-    public async Task<int> SeedMemberOnUpcomingSessionsAsync(string userId, CancellationToken cancellationToken = default)
+    public Task<int> SeedMemberOnUpcomingSessionsAsync(string userId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-            return 0;
-        var from = DateTime.UtcNow.AddHours(-6);
-        var to = DateTime.UtcNow.AddDays(120);
-        var sessionIds = await db.PlaySessions.AsNoTracking()
-            .Where(session => session.IsPublished && !session.IsCancelled
-                && session.ScheduledAt >= from
-                && session.ScheduledAt <= to)
-            .Select(session => session.Id)
-            .ToListAsync(cancellationToken);
-        var already = await db.SessionAttendances.AsNoTracking()
-            .Where(row => sessionIds.Contains(row.PlaySessionId) && row.UserId == userId)
-            .Select(row => row.PlaySessionId)
-            .ToListAsync(cancellationToken);
-        var have = already.ToHashSet();
-        var added = 0;
-        foreach (var sessionId in sessionIds)
-        {
-            if (!have.Add(sessionId))
-                continue;
-            db.SessionAttendances.Add(new SessionAttendance
-            {
-                Id = Guid.NewGuid(),
-                PlaySessionId = sessionId,
-                UserId = userId,
-                Status = AttendanceStatus.Absent,
-                RsvpStatus = SessionRsvpStatus.Unknown
-            });
-            added++;
-        }
-
-        if (added > 0)
-            await db.SaveChangesAsync(cancellationToken);
-        return added;
+        // A member is listed only after they answer or are checked in. Registration does not add a row.
+        _ = userId;
+        _ = cancellationToken;
+        return Task.FromResult(0);
     }
 
     public async Task<IReadOnlyList<CalendarEventDto>> MapManyAsync(
@@ -580,7 +633,11 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         {
             var end = item.EndsAt ?? item.ScheduledAt.AddHours(4);
             var summary = string.IsNullOrWhiteSpace(item.Title) ? "Club game" : item.Title!;
+            if (item.ScheduleKind == "GameDay" && !summary.StartsWith("Game day", StringComparison.OrdinalIgnoreCase))
+                summary = "Game day: " + summary;
             var description = item.Notes ?? "";
+            if (!string.IsNullOrWhiteSpace(item.HostName))
+                description = string.IsNullOrEmpty(description) ? "Host: " + item.HostName : description + "\\nHost: " + item.HostName;
             if (!string.IsNullOrWhiteSpace(item.LocationNotes))
                 description = string.IsNullOrEmpty(description) ? item.LocationNotes! : description + "\\n" + item.LocationNotes;
             if (!string.IsNullOrWhiteSpace(item.OnlineLink))
@@ -603,6 +660,419 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
 
         builder.AppendLine("END:VCALENDAR");
         return builder.ToString().Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal);
+    }
+
+    public async Task<(bool Ok, int Created, Guid? FirstId, string? Error)> CreateGameDaySeriesAsync(
+        CreateGameDayRequest request,
+        string createdByUserId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(createdByUserId))
+            return (false, 0, null, "User required.");
+        if (request.EndsAt is not DateTimeOffset endsAt)
+            return (false, 0, null, "A game day needs a start and an end.");
+        if (endsAt <= request.ScheduledAt)
+            return (false, 0, null, "End time must be after the start time.");
+        if (Clean(request.Venue) is null && Clean(request.Address) is null)
+            return (false, 0, null, "A game day needs a venue or an address.");
+
+        var weeks = Math.Clamp(request.Weeks <= 0 ? 1 : request.Weeks, 1, 26);
+        Guid? seriesKey = weeks > 1 ? Guid.NewGuid() : null;
+        var created = 0;
+        Guid? firstId = null;
+        for (var week = 0; week < weeks; week++)
+        {
+            var title = Clean(request.Title);
+            if (title is not null && weeks > 1)
+                title = $"{title} (week {week + 1})";
+            var day = new GameDay
+            {
+                Id = Guid.NewGuid(),
+                ScheduledAt = request.ScheduledAt.AddDays(7 * week).UtcDateTime,
+                EndsAt = endsAt.AddDays(7 * week).UtcDateTime,
+                Title = title,
+                Notes = Clean(request.Notes),
+                Venue = Clean(request.Venue),
+                Address = Clean(request.Address),
+                OnlineLink = Clean(request.OnlineLink),
+                LocationNotes = Clean(request.LocationNotes),
+                CreatedByUserId = createdByUserId,
+                CreatedAt = DateTime.UtcNow,
+                IsPublished = request.IsPublished,
+                SeriesKey = seriesKey
+            };
+            db.GameDays.Add(day);
+            created++;
+            firstId ??= day.Id;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return (true, created, firstId, null);
+    }
+
+    public async Task<List<GameDay>> ListGameDaysAsync(
+        DateTime from,
+        DateTime to,
+        string? viewerUserId,
+        bool includeAllUnpublished,
+        CancellationToken cancellationToken = default)
+    {
+        var query = db.GameDays.AsNoTracking()
+            .Include(day => day.Games).ThenInclude(game => game.Attendances)
+            .Include(day => day.Games).ThenInclude(game => game.RuleSet)
+            .Where(day => day.ScheduledAt <= to && day.EndsAt >= from);
+        if (!includeAllUnpublished)
+        {
+            query = string.IsNullOrEmpty(viewerUserId)
+                ? query.Where(day => day.IsPublished)
+                : query.Where(day => day.IsPublished
+                    || day.CreatedByUserId == viewerUserId
+                    || day.Games.Any(game => game.CreatedByUserId == viewerUserId));
+        }
+
+        var days = await query.OrderBy(day => day.ScheduledAt).ThenBy(day => day.CreatedAt).ToListAsync(cancellationToken);
+        foreach (var day in days)
+            ApplyGameVisibility(day, viewerUserId, includeAllUnpublished);
+        return days;
+    }
+
+    public Task<GameDay?> GetGameDayAsync(Guid id, CancellationToken cancellationToken = default) =>
+        db.GameDays.FirstOrDefaultAsync(day => day.Id == id, cancellationToken);
+
+    public async Task<GameDay?> GetGameDayForReadAsync(
+        Guid id,
+        string? viewerUserId,
+        bool includeAllUnpublished,
+        CancellationToken cancellationToken = default)
+    {
+        var day = await db.GameDays.AsNoTracking()
+            .Include(item => item.Games).ThenInclude(game => game.Attendances)
+            .Include(item => item.Games).ThenInclude(game => game.RuleSet)
+            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (day is null)
+            return null;
+        var canSee = includeAllUnpublished
+            || day.IsPublished
+            || day.CreatedByUserId == viewerUserId
+            || day.Games.Any(game => game.CreatedByUserId == viewerUserId);
+        if (!canSee)
+            return null;
+        ApplyGameVisibility(day, viewerUserId, includeAllUnpublished);
+        return day;
+    }
+
+    public async Task<(bool Ok, string? Error)> UpdateGameDayDetailsAsync(
+        Guid id,
+        UpdateGameDayRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (Clean(request.Venue) is null && Clean(request.Address) is null)
+            return (false, "A game day needs a venue or an address.");
+        var day = await db.GameDays.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (day is null)
+            return (false, "That game day was not found.");
+        if (day.IsCancelled)
+            return (false, "Cancelled game days cannot be edited. Schedule a new one instead.");
+
+        day.Title = Clean(request.Title);
+        day.Notes = Clean(request.Notes);
+        day.Venue = Clean(request.Venue);
+        day.Address = Clean(request.Address);
+        day.OnlineLink = Clean(request.OnlineLink);
+        day.LocationNotes = Clean(request.LocationNotes);
+        await db.SaveChangesAsync(cancellationToken);
+        return (true, null);
+    }
+
+    public async Task<(bool Ok, string? Error)> SetGameDayPublishedAsync(Guid id, bool published, CancellationToken cancellationToken = default)
+    {
+        var day = await db.GameDays.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (day is null)
+            return (false, "That game day was not found.");
+        day.IsPublished = published;
+        await db.SaveChangesAsync(cancellationToken);
+        return (true, null);
+    }
+
+    public async Task<(bool Ok, string? Error)> CancelGameDayAsync(
+        Guid id,
+        string actorUserId,
+        string? reason,
+        bool entireSeries,
+        bool notify,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await db.GameDays.Include(day => day.Games).FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (root is null)
+            return (false, "That game day was not found.");
+
+        var targets = new List<GameDay> { root };
+        if (entireSeries && root.SeriesKey is Guid seriesKey)
+        {
+            var rest = await db.GameDays.Include(day => day.Games)
+                .Where(item => item.SeriesKey == seriesKey && item.Id != root.Id && item.ScheduledAt >= root.ScheduledAt)
+                .ToListAsync(cancellationToken);
+            targets.AddRange(rest);
+        }
+
+        var now = DateTime.UtcNow;
+        var gameIds = new List<Guid>();
+        foreach (var day in targets)
+        {
+            day.IsCancelled = true;
+            day.CancelledUtc = now;
+            day.CancelledByUserId = actorUserId;
+            day.CancellationReason = Clean(reason);
+            foreach (var game in day.Games.Where(game => !game.IsCancelled))
+            {
+                game.IsCancelled = true;
+                game.CancelledUtc = now;
+                game.CancelledByUserId = actorUserId;
+                game.CancellationReason = Clean(reason);
+                game.AllowPlayerRsvp = false;
+                gameIds.Add(game.Id);
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        if (notify && gameIds.Count > 0)
+        {
+            await NotifyRsvpPlayersAsync(
+                gameIds,
+                "Cancelled: game day",
+                "This game day was cancelled, and the games on it were cancelled with it.",
+                reason,
+                cancellationToken);
+        }
+
+        return (true, null);
+    }
+
+    public async Task<(bool Ok, string? Error)> RescheduleGameDayAsync(
+        Guid id,
+        DateTimeOffset newStart,
+        DateTimeOffset? newEnd,
+        bool entireSeriesFollowing,
+        bool notify,
+        CancellationToken cancellationToken = default)
+    {
+        if (newEnd is not DateTimeOffset end)
+            return (false, "A game day needs a start and an end.");
+        if (end <= newStart)
+            return (false, "End time must be after the start time.");
+
+        var root = await db.GameDays.Include(day => day.Games).FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (root is null)
+            return (false, "That game day was not found.");
+        if (root.IsCancelled)
+            return (false, "Cancelled game days stay cancelled. Schedule a new one.");
+
+        var oldStart = DateTime.SpecifyKind(root.ScheduledAt, DateTimeKind.Utc);
+        var delta = newStart.UtcDateTime - oldStart;
+        var targets = new List<GameDay> { root };
+        if (entireSeriesFollowing && root.SeriesKey is Guid seriesKey)
+        {
+            var rest = await db.GameDays.Include(day => day.Games)
+                .Where(item => item.SeriesKey == seriesKey && item.Id != root.Id && item.ScheduledAt >= oldStart && !item.IsCancelled)
+                .ToListAsync(cancellationToken);
+            targets.AddRange(rest);
+        }
+
+        var proposedDays = new List<(GameDay Day, DateTime Start, DateTime End)>();
+        var proposedGames = new List<(PlaySession Game, DateTime Start, DateTime End)>();
+        foreach (var day in targets)
+        {
+            var startUtc = day.Id == root.Id ? newStart.UtcDateTime : day.ScheduledAt.Add(delta);
+            var endUtc = day.Id == root.Id ? end.UtcDateTime : day.EndsAt.Add(delta);
+            if (endUtc <= startUtc)
+                return (false, "End time must be after the start time.");
+            foreach (var game in day.Games)
+            {
+                if (game.EndsAt is not DateTime existingEnd)
+                    return (false, "A game would fall outside the game day. Lengthen the day or detach that game first.");
+                var gameStart = game.ScheduledAt.Add(delta);
+                var gameEnd = existingEnd.Add(delta);
+                if (gameStart < startUtc || gameEnd > endUtc || gameEnd < gameStart)
+                    return (false, "A game would fall outside the game day. Lengthen the day or detach that game first.");
+                proposedGames.Add((game, gameStart, gameEnd));
+            }
+
+            proposedDays.Add((day, startUtc, endUtc));
+        }
+
+        foreach (var (day, startUtc, endUtc) in proposedDays)
+        {
+            day.ScheduledAt = startUtc;
+            day.EndsAt = endUtc;
+        }
+
+        foreach (var (game, startUtc, endUtc) in proposedGames)
+        {
+            game.ScheduledAt = startUtc;
+            game.EndsAt = endUtc;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        if (notify && proposedGames.Count > 0)
+        {
+            await NotifyRsvpPlayersAsync(
+                proposedGames.Select(item => item.Game.Id).ToList(),
+                "Rescheduled: game day",
+                $"Game day moved to {ClubTime.FormatDateTime(newStart)}. Games on it move by the same amount.",
+                null,
+                cancellationToken);
+        }
+
+        return (true, null);
+    }
+
+    public async Task<(bool Ok, string? Error)> DetachGameAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var session = await db.PlaySessions.Include(item => item.GameDay)
+            .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
+        if (session is null)
+            return (false, "Event not found.");
+        if (session.GameDay is null)
+            return (false, "This game is not on a game day.");
+
+        var day = session.GameDay;
+        session.Venue = Clean(session.Venue) ?? day.Venue;
+        session.Address = Clean(session.Address) ?? day.Address;
+        session.OnlineLink = Clean(session.OnlineLink) ?? day.OnlineLink;
+        session.LocationNotes = Clean(session.LocationNotes) ?? day.LocationNotes;
+        session.GameDayId = null;
+        session.GameDay = null;
+        await db.SaveChangesAsync(cancellationToken);
+        return (true, null);
+    }
+
+    public async Task<CalendarEventDto?> NextCardAsync(string? viewerUserId, bool viewerIsAdmin, CancellationToken cancellationToken = default)
+    {
+        var from = DateTime.UtcNow.AddHours(-12);
+        var to = DateTime.UtcNow.AddDays(180);
+        var now = DateTime.UtcNow;
+        var sessions = await ListSessionsAsync(from, to, null, includeAllUnpublished: false, cancellationToken);
+        var days = await ListGameDaysAsync(from, to, null, includeAllUnpublished: false, cancellationToken);
+        var nextGame = sessions
+            .Where(session => session.GameDayId is null && !session.IsCancelled && (session.EndsAt ?? session.ScheduledAt) >= now)
+            .OrderBy(session => session.ScheduledAt)
+            .FirstOrDefault();
+        var nextDay = days
+            .Where(day => !day.IsCancelled && day.EndsAt >= now)
+            .OrderBy(day => day.ScheduledAt)
+            .FirstOrDefault();
+        if (nextDay is not null && (nextGame is null || nextDay.ScheduledAt <= nextGame.ScheduledAt))
+        {
+            var mapped = await MapGameDaysAsync([nextDay], viewerUserId, viewerIsAdmin, cancellationToken);
+            return ToCalendarEvent(mapped[0]);
+        }
+
+        if (nextGame is null)
+            return null;
+        var games = await MapManyAsync([nextGame], viewerUserId, viewerIsAdmin, cancellationToken);
+        return games[0];
+    }
+
+    public async Task<IReadOnlyList<GameDayDto>> MapGameDaysAsync(
+        IReadOnlyList<GameDay> days,
+        string? viewerUserId,
+        bool viewerIsAdmin,
+        CancellationToken cancellationToken)
+    {
+        foreach (var day in days)
+        {
+            foreach (var game in day.Games)
+                game.GameDay ??= day;
+        }
+
+        var mappedGames = await MapManyAsync(days.SelectMany(day => day.Games).ToList(), viewerUserId, viewerIsAdmin, cancellationToken);
+        var byId = mappedGames.ToDictionary(game => game.Id);
+        var ownerIds = days.Select(day => day.CreatedByUserId).Distinct().ToList();
+        var names = ownerIds.Count == 0
+            ? new Dictionary<string, string>()
+            : await db.Users.AsNoTracking()
+                .Where(user => ownerIds.Contains(user.Id))
+                .ToDictionaryAsync(user => user.Id, user => user.DisplayName, cancellationToken);
+        return days.Select(day =>
+        {
+            names.TryGetValue(day.CreatedByUserId, out var ownerName);
+            var games = day.Games.Select(game => byId[game.Id]).OrderBy(game => game.ScheduledAt).ToList();
+            var going = day.Games
+                .Where(game => !game.IsCancelled)
+                .SelectMany(game => game.Attendances)
+                .Where(row => row.RsvpStatus == SessionRsvpStatus.Going)
+                .Select(row => row.UserId)
+                .Distinct(StringComparer.Ordinal)
+                .Count();
+            return new GameDayDto
+            {
+                Id = day.Id,
+                ScheduledAt = AsOffset(day.ScheduledAt),
+                EndsAt = AsOffset(day.EndsAt),
+                Title = day.Title,
+                Notes = day.Notes,
+                Venue = day.Venue,
+                Address = day.Address,
+                OnlineLink = day.OnlineLink,
+                LocationNotes = day.LocationNotes,
+                IsPublished = day.IsPublished,
+                IsCancelled = day.IsCancelled,
+                CancellationReason = day.CancellationReason,
+                SeriesKey = day.SeriesKey,
+                OwnerUserId = day.CreatedByUserId,
+                OwnerDisplayName = string.IsNullOrWhiteSpace(ownerName) ? "Member" : ownerName,
+                CanEdit = viewerIsAdmin || (!string.IsNullOrEmpty(viewerUserId) && viewerUserId == day.CreatedByUserId),
+                PlayersGoing = going,
+                LocationDisplay = FormatLocation(day.Venue, day.Address, day.LocationNotes),
+                Games = games
+            };
+        }).ToList();
+    }
+
+    public static CalendarEventDto ToCalendarEvent(GameDayDto day)
+    {
+        var titles = day.Games
+            .Where(game => !game.IsCancelled)
+            .Select(game => string.IsNullOrWhiteSpace(game.Title) ? "Club game" : game.Title!)
+            .ToList();
+        return new CalendarEventDto
+        {
+            Id = day.Id,
+            ScheduledAt = day.ScheduledAt,
+            EndsAt = day.EndsAt,
+            Title = string.IsNullOrWhiteSpace(day.Title) ? "Game day" : day.Title,
+            Notes = day.Notes,
+            IsPublished = day.IsPublished,
+            AllowPlayerRsvp = false,
+            Going = day.PlayersGoing,
+            IsCancelled = day.IsCancelled,
+            CancellationReason = day.CancellationReason,
+            SeriesKey = day.SeriesKey,
+            Venue = day.Venue,
+            Address = day.Address,
+            OnlineLink = day.OnlineLink,
+            LocationNotes = day.LocationNotes,
+            RuleSetName = titles.Count == 0 ? "No games posted yet" : string.Join(", ", titles),
+            ScheduleKind = "GameDay",
+            OwnerUserId = day.OwnerUserId,
+            OwnerDisplayName = day.OwnerDisplayName,
+            CanEdit = day.CanEdit,
+            LocationDisplay = day.LocationDisplay
+        };
+    }
+
+    public static void ApplyGameVisibility(GameDay day, string? viewerUserId, bool includeAllUnpublished)
+    {
+        day.Games = day.Games
+            .Where(game => includeAllUnpublished
+                || game.IsPublished
+                || game.CreatedByUserId == viewerUserId
+                || day.CreatedByUserId == viewerUserId)
+            .OrderBy(game => game.ScheduledAt)
+            .ThenBy(game => game.CreatedAt)
+            .ToList();
+        foreach (var game in day.Games)
+            game.GameDay ??= day;
     }
 
     private async Task PromoteWaitlistAsync(Guid sessionId, CancellationToken cancellationToken)
@@ -690,15 +1160,6 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         }
     }
 
-    private async Task<List<string>> MemberIdsAsync(CancellationToken cancellationToken)
-    {
-        var roleIds = await db.Roles
-            .Where(role => role.Name == RoleNames.Member || role.Name == RoleNames.Admin || role.Name == RoleNames.SuperAdmin)
-            .Select(role => role.Id)
-            .ToListAsync(cancellationToken);
-        return await db.UserRoles.Where(link => roleIds.Contains(link.RoleId)).Select(link => link.UserId).Distinct().ToListAsync(cancellationToken);
-    }
-
     private async Task<bool> IsMemberAsync(string userId, CancellationToken cancellationToken)
     {
         var roleIds = await db.Roles
@@ -722,9 +1183,11 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         var noShows = session.ScheduledAt < DateTime.UtcNow.AddHours(-1)
             ? rows.Count(row => row.RsvpStatus == SessionRsvpStatus.Going && row.Status != AttendanceStatus.Present)
             : 0;
-        var location = string.Join(", ", new[] { session.Venue, session.Address }.Where(part => !string.IsNullOrWhiteSpace(part)));
-        if (!string.IsNullOrWhiteSpace(session.LocationNotes))
-            location = string.IsNullOrWhiteSpace(location) ? session.LocationNotes! : $"{location} ({session.LocationNotes})";
+        var day = session.GameDay;
+        var venue = day is null ? session.Venue : day.Venue;
+        var address = day is null ? session.Address : day.Address;
+        var online = day is null ? session.OnlineLink : day.OnlineLink;
+        var locationNotes = day is null ? session.LocationNotes : day.LocationNotes;
         names.TryGetValue(session.CreatedByUserId, out var ownerName);
         return new CalendarEventDto
         {
@@ -738,25 +1201,29 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             Going = rows.Count(row => row.RsvpStatus == SessionRsvpStatus.Going),
             Maybe = rows.Count(row => row.RsvpStatus == SessionRsvpStatus.Maybe),
             NotGoing = rows.Count(row => row.RsvpStatus == SessionRsvpStatus.NotGoing),
-            NoResponse = rows.Count(row => row.RsvpStatus == SessionRsvpStatus.Unknown),
             Waitlist = rows.Count(row => row.RsvpStatus == SessionRsvpStatus.Waitlist),
             MyRsvp = mine?.RsvpStatus ?? SessionRsvpStatus.Unknown,
             Present = rows.Count(row => row.Status == AttendanceStatus.Present),
             IAmCheckedIn = mine?.Status == AttendanceStatus.Present,
             NoShows = noShows,
             SeriesKey = session.SeriesKey,
-            Venue = session.Venue,
-            Address = session.Address,
-            OnlineLink = session.OnlineLink,
-            LocationNotes = session.LocationNotes,
+            Venue = venue,
+            Address = address,
+            OnlineLink = online,
+            LocationNotes = locationNotes,
             PlayerCap = session.PlayerCap,
             IsCancelled = session.IsCancelled,
             CancellationReason = session.CancellationReason,
             RuleSetId = session.RuleSetId,
-            RuleSetName = session.RuleSet?.Name,
+            RuleSetName = session.RuleSet?.Name ?? session.CustomRuleSetName,
+            GameDayId = session.GameDayId,
+            CanDetach = session.GameDayId is not null
+                && (viewerIsAdmin || (!string.IsNullOrEmpty(viewerUserId) && viewerUserId == day?.CreatedByUserId)),
+            ScheduleKind = "Game",
             OwnerUserId = session.CreatedByUserId,
             OwnerDisplayName = string.IsNullOrWhiteSpace(ownerName) ? "Member" : ownerName,
             OwnerIsGm = gmIds.Contains(session.CreatedByUserId),
+            HostName = session.HostName,
             CanEdit = viewerIsAdmin || (!string.IsNullOrEmpty(viewerUserId) && viewerUserId == session.CreatedByUserId),
             CanAddPhotos = viewerIsAdmin || (viewerIsGm && !string.IsNullOrEmpty(viewerUserId) && viewerUserId == session.CreatedByUserId),
             Photos = photos.Select(photo => new EventPhotoDto
@@ -767,7 +1234,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
                 CreatedAtUtc = DateTime.SpecifyKind(photo.CreatedAtUtc, DateTimeKind.Utc),
                 CanEdit = viewerIsAdmin || (!string.IsNullOrEmpty(viewerUserId) && viewerUserId == photo.OwnerUserId)
             }).ToArray(),
-            LocationDisplay = string.IsNullOrWhiteSpace(location) ? "Not listed" : location
+            LocationDisplay = FormatLocation(venue, address, locationNotes)
         };
     }
 
@@ -783,9 +1250,53 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
     private static DateTimeOffset AsOffset(DateTime value) =>
         new(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero);
 
+    /// <summary>
+    /// A typed name wins over a listed id. A name that matches the club list uses that rule set.
+    /// Any other name is stored on the game and is not added to the club list.
+    /// </summary>
+    private async Task<(bool Ok, Guid? RuleSetId, string? CustomName, string? Error)> ResolveRuleSetAsync(
+        Guid? ruleSetId,
+        string? ruleSetName,
+        CancellationToken cancellationToken)
+    {
+        var typed = Clean(ruleSetName);
+        if (typed is not null)
+        {
+            var matchId = await db.RuleSets
+                .Where(ruleSet => ruleSet.Name.ToLower() == typed.ToLower())
+                .Select(ruleSet => (Guid?)ruleSet.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (matchId is Guid id)
+                return (true, id, null, null);
+            return (true, null, typed, null);
+        }
+
+        if (ruleSetId is Guid requested && !await db.RuleSets.AnyAsync(ruleSet => ruleSet.Id == requested, cancellationToken))
+            return (false, null, null, "That rule set is not on the club list.");
+
+        return (true, ruleSetId, null, null);
+    }
+
     private static string? Clean(string? value)
     {
         var trimmed = value?.Trim();
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
+    }
+
+    private static string? GameOutsideDay(DateTime startUtc, DateTime endUtc, GameDay day)
+    {
+        if (endUtc < startUtc)
+            return "End time must be after the start time.";
+        if (startUtc < day.ScheduledAt || endUtc > day.EndsAt)
+            return "Table times must stay inside the game day.";
+        return null;
+    }
+
+    private static string FormatLocation(string? venue, string? address, string? locationNotes)
+    {
+        var location = string.Join(", ", new[] { venue, address }.Where(part => !string.IsNullOrWhiteSpace(part)));
+        if (!string.IsNullOrWhiteSpace(locationNotes))
+            location = string.IsNullOrWhiteSpace(location) ? locationNotes! : $"{location} ({locationNotes})";
+        return string.IsNullOrWhiteSpace(location) ? "Not listed" : location;
     }
 }

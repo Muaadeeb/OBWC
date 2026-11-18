@@ -1,0 +1,31 @@
+<MudAutocomplete T="string" Value="_text" ValueChanged="OnValueChanged" Label="Rule set" Variant="Variant.Outlined"
+                 Margin="Margin.Dense" Clearable="true" CoerceValue="true" ResetValueOnEmptyText="true"
+                 MaxItems="60" MaxLength="200" SearchFunc="Search"
+                 HelperText="Choose a listed rule set, or type one that is not listed." />
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public IReadOnlyList<RuleSetDto> RuleSets { get; set; } = [];
+
+    private string _text = "";
+
+    protected override void OnParametersSet()
+    {
+        _text = Value ?? "";
+    }
+
+    private async Task OnValueChanged(string? value)
+    {
+        _text = value ?? "";
+        await ValueChanged.InvokeAsync(string.IsNullOrWhiteSpace(_text) ? null : _text);
+    }
+
+    private Task<IEnumerable<string>> Search(string? text, CancellationToken _)
+    {
+        IEnumerable<string> names = RuleSets.Select(ruleSet => ruleSet.Name);
+        if (!string.IsNullOrWhiteSpace(text))
+            names = names.Where(name => name.Contains(text, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(names);
+    }
+}

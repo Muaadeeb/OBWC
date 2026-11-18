@@ -1,0 +1,106 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Edit game day</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2 d-block">Times stay on Reschedule. Games keep using this place.</MudText>
+        <MudForm @ref="_form">
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_venue" @bind-Value:after="SyncPlace" Label="Venue" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Validation="@(new Func<string, string?>(ValidateVenue))" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_address" @bind-Value:after="SyncPlace" Label="Address" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Validation="@(new Func<string, string?>(ValidateAddress))" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_online" Label="Discord / online link" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_locationNotes" Label="Location notes" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_notes" Label="Notes" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+            </MudItem>
+        </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Notes { get; set; }
+    [Parameter] public string? Venue { get; set; }
+    [Parameter] public string? Address { get; set; }
+    [Parameter] public string? OnlineLink { get; set; }
+    [Parameter] public string? LocationNotes { get; set; }
+
+    private string _title = "";
+    private string _notes = "";
+    private string _venue = "";
+    private string _address = "";
+    private string _online = "";
+    private string _locationNotes = "";
+    private MudForm _form = null!;
+    private bool _attempted;
+
+    protected override void OnParametersSet()
+    {
+        _title = Title ?? "";
+        _notes = Notes ?? "";
+        _venue = Venue ?? "";
+        _address = Address ?? "";
+        _online = OnlineLink ?? "";
+        _locationNotes = LocationNotes ?? "";
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SyncPlace()
+    {
+        if (_attempted)
+            await _form.ValidateAsync();
+    }
+
+    private string? ValidateVenue(string venue) => PlaceError(venue, _address);
+
+    private string? ValidateAddress(string address) => PlaceError(_venue, address);
+
+    private static string? PlaceError(string? venue, string? address) =>
+        string.IsNullOrWhiteSpace(venue) && string.IsNullOrWhiteSpace(address)
+            ? "A game day needs a venue or an address."
+            : null;
+
+    private async Task SubmitAsync()
+    {
+        _attempted = true;
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        MudDialog.Close(DialogResult.Ok(new Result(
+            string.IsNullOrWhiteSpace(_title) ? null : _title.Trim(),
+            string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim(),
+            _venue.Trim(),
+            string.IsNullOrWhiteSpace(_address) ? null : _address.Trim(),
+            string.IsNullOrWhiteSpace(_online) ? null : _online.Trim(),
+            string.IsNullOrWhiteSpace(_locationNotes) ? null : _locationNotes.Trim())));
+    }
+
+    public sealed record Result(
+        string? Title,
+        string? Notes,
+        string? Venue,
+        string? Address,
+        string? OnlineLink,
+        string? LocationNotes);
+}

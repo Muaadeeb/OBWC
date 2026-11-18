@@ -1,0 +1,219 @@
+@if (Nested)
+{
+    <MudExpansionPanels Class="@NestedClass" Elevation="0">
+        <MudExpansionPanel>
+            <TitleContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap flex-grow-1">
+                    <MudText Typo="Typo.body2">@(UsesWholeDay ? "Whole game day" : ClubTime.FormatTimeRange(Event.ScheduledAt, Event.EndsAt))</MudText>
+                    <MudText Typo="Typo.subtitle1">@(string.IsNullOrWhiteSpace(Event.Title) ? "Club game" : Event.Title)</MudText>
+                    @if (!string.IsNullOrWhiteSpace(Event.HostName))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Host: @Event.HostName</MudText>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Event.RuleSetName))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@Event.RuleSetName</MudText>
+                    }
+                    @if (Event.PlayerCap is int headerCap)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Cap @headerCap</MudChip>
+                    }
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">Going @Event.Going</MudChip>
+                    @if (!Event.IsPublished)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Draft</MudChip>
+                    }
+                    @if (Event.IsCancelled)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error">Cancelled</MudChip>
+                    }
+                </MudStack>
+            </TitleContent>
+            <ChildContent>
+                <div class="pa-3 pt-0">
+                    @CardBody
+                </div>
+            </ChildContent>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+}
+else
+{
+    <MudPaper Class="pa-3 mb-2" Outlined="true" Style="@PaperStyle">
+        @CardBody
+    </MudPaper>
+}
+
+@code {
+    private RenderFragment CardBody => @<MudStack Row="true" AlignItems="AlignItems.Start" Class="flex-wrap">
+        <MudStack Spacing="0" Style="min-width:10rem">
+            @if (!Nested)
+            {
+                <MudText Typo="Typo.subtitle1"><strong>@ClubTime.FormatDate(Event.ScheduledAt)</strong></MudText>
+            }
+            @if (!UsesWholeDay)
+            {
+                <MudText Typo="Typo.body2">@ClubTime.FormatTimeRange(Event.ScheduledAt, Event.EndsAt)</MudText>
+            }
+            else if (Nested)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Whole game day</MudText>
+            }
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined" Class="fit-chip">Game</MudChip>
+            @if (Event.IsCancelled) { <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="fit-chip">Cancelled</MudChip> }
+            @if (!Event.IsPublished) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="fit-chip">Draft</MudChip> }
+            @if (Event.SeriesKey is not null) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="fit-chip">Series</MudChip> }
+            @if (Event.PlayerCap is int cap) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Cap @cap</MudChip> }
+            @if (IsPast) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Past</MudChip> }
+        </MudStack>
+        <MudStack Spacing="1" Style="flex:1; min-width:14rem">
+            <MudText Typo="@(Nested ? Typo.subtitle1 : Typo.h6)">@(string.IsNullOrWhiteSpace(Event.Title) ? "Club game" : Event.Title)</MudText>
+            @if (!Nested)
+            {
+                <MudText Typo="Typo.caption">@Event.Venue @(!string.IsNullOrWhiteSpace(Event.Address) ? " · " + Event.Address : "")</MudText>
+            }
+            @if (!string.IsNullOrWhiteSpace(Event.RuleSetName))
+            {
+                <MudText Typo="Typo.caption">@Event.RuleSetName</MudText>
+            }
+            @if (!Nested && !string.IsNullOrWhiteSpace(Event.OnlineLink))
+            {
+                <MudLink Href="@Event.OnlineLink" Target="_blank">Online / Discord</MudLink>
+            }
+            @if (!Nested && !string.IsNullOrWhiteSpace(Event.LocationNotes))
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Event.LocationNotes</MudText>
+            }
+            @if (!string.IsNullOrWhiteSpace(Event.Notes))
+            {
+                <MudText Typo="Typo.body2" Style="white-space:pre-wrap">@Event.Notes</MudText>
+            }
+            @if (Event.IsCancelled && !string.IsNullOrWhiteSpace(Event.CancellationReason))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Error">@Event.CancellationReason</MudText>
+            }
+            @if (!string.IsNullOrWhiteSpace(Event.HostName))
+            {
+                <MudText Typo="Typo.body2">Host: @Event.HostName</MudText>
+            }
+            <MudText Typo="Typo.caption">Scheduled by @Event.OwnerDisplayName@(Event.OwnerIsGm ? " · GM" : "")</MudText>
+            <EventPhotos EventId="Event.Id" CanAdd="Event.CanAddPhotos" Photos="Event.Photos" OnChanged="OnChanged" />
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                <MudChip T="string" Size="Size.Small" Color="Color.Success">Going @Event.Going</MudChip>
+                @if (Event.Waitlist > 0) { <MudChip T="string" Size="Size.Small" Color="Color.Info">Waitlist @Event.Waitlist</MudChip> }
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">Maybe @Event.Maybe</MudChip>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error">No @Event.NotGoing</MudChip>
+                @if (Event.Present > 0) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Checked in @Event.Present</MudChip> }
+            </MudStack>
+            @if (Expanded && Roster is not null)
+            {
+                <MudSimpleTable Dense="true" Hover="true" Class="mt-2">
+                    <thead><tr><th>Player</th><th>RSVP</th><th>Night</th><th>Check-in</th>@if (Event.CanEdit && !Event.IsCancelled) { <th></th> }</tr></thead>
+                    <tbody>
+                    @foreach (var row in Roster)
+                    {
+                        <tr>
+                            <td>@row.DisplayName</td>
+                            <td>@row.Rsvp</td>
+                            <td>@row.NightStatus</td>
+                            <td>@(row.CheckedInAt is DateTimeOffset checkedIn ? ClubTime.FormatTime(checkedIn) : "—")</td>
+                            @if (Event.CanEdit && !Event.IsCancelled)
+                            {
+                                <td>
+                                    <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="Busy"
+                                               OnClick="() => OnManagerCheckIn.InvokeAsync((Event.Id, row.UserId, row.NightStatus == AttendanceStatus.Present))">
+                                        @(row.NightStatus == AttendanceStatus.Present ? "Undo" : "Check in")
+                                    </MudButton>
+                                </td>
+                            }
+                        </tr>
+                    }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </MudStack>
+        <MudStack Spacing="1" AlignItems="AlignItems.End">
+            @if (Event.CanEdit && !Event.IsCancelled)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="Busy" OnClick="() => OnPublish.InvokeAsync(Event)">@(Event.IsPublished ? "Unpublish" : "Publish")</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="Busy" OnClick="() => OnEdit.InvokeAsync(Event)">Edit game…</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Warning" Disabled="Busy" OnClick="() => OnReschedule.InvokeAsync(Event)">Reschedule…</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" Disabled="Busy" OnClick="() => OnCancel.InvokeAsync(Event)">Cancel game…</MudButton>
+            }
+            @if (Event.CanDetach)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="Busy" OnClick="() => OnDetach.InvokeAsync(Event)">Take off this game day</MudButton>
+            }
+            <AuthorizeView Roles="Member,Admin,SuperAdmin">
+                <Authorized>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => OnToggleRoster.InvokeAsync(Event.Id)">@(Expanded ? "Hide roster" : "RSVP roster")</MudButton>
+                    @if (!Event.IsCancelled && Event.AllowPlayerRsvp && Event.IsPublished && !IsPast)
+                    {
+                        <MudButtonGroup OverrideStyles="false" Class="flex-wrap">
+                            <MudButton Size="Size.Small" Variant="@(Event.MyRsvp is SessionRsvpStatus.Going or SessionRsvpStatus.Waitlist ? Variant.Filled : Variant.Outlined)" Color="Color.Success" Disabled="Busy" OnClick="() => OnRsvp.InvokeAsync((Event.Id, SessionRsvpStatus.Going))">Going</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(Event.MyRsvp == SessionRsvpStatus.Maybe ? Variant.Filled : Variant.Outlined)" Color="Color.Warning" Disabled="Busy" OnClick="() => OnRsvp.InvokeAsync((Event.Id, SessionRsvpStatus.Maybe))">Maybe</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(Event.MyRsvp == SessionRsvpStatus.NotGoing ? Variant.Filled : Variant.Outlined)" Color="Color.Error" Disabled="Busy" OnClick="() => OnRsvp.InvokeAsync((Event.Id, SessionRsvpStatus.NotGoing))">No</MudButton>
+                        </MudButtonGroup>
+                        @if (Event.MyRsvp == SessionRsvpStatus.Waitlist)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Info">You are on the waitlist</MudText>
+                        }
+                    }
+                    @if (!Event.IsCancelled && NearNow)
+                    {
+                        <MudButton Size="Size.Small" Variant="@(Event.IAmCheckedIn ? Variant.Filled : Variant.Outlined)" Color="Color.Success" Disabled="Busy"
+                                   OnClick="() => OnSelfCheckIn.InvokeAsync(Event)">
+                            @(Event.IAmCheckedIn ? "Checked in (undo)" : "Check in — I'm here")
+                        </MudButton>
+                    }
+                </Authorized>
+            </AuthorizeView>
+        </MudStack>
+    </MudStack>;
+
+    [Parameter, EditorRequired] public CalendarEventDto Event { get; set; } = null!;
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public bool Expanded { get; set; }
+    [Parameter] public bool Nested { get; set; }
+    [Parameter] public DateTimeOffset? DayStart { get; set; }
+    [Parameter] public DateTimeOffset? DayEnd { get; set; }
+    [Parameter] public IReadOnlyList<RosterRowDto>? Roster { get; set; }
+    [Parameter] public EventCallback<Guid> OnToggleRoster { get; set; }
+    [Parameter] public EventCallback<CalendarEventDto> OnPublish { get; set; }
+    [Parameter] public EventCallback<CalendarEventDto> OnEdit { get; set; }
+    [Parameter] public EventCallback<CalendarEventDto> OnReschedule { get; set; }
+    [Parameter] public EventCallback<CalendarEventDto> OnCancel { get; set; }
+    [Parameter] public EventCallback<CalendarEventDto> OnDetach { get; set; }
+    [Parameter] public EventCallback<CalendarEventDto> OnSelfCheckIn { get; set; }
+    [Parameter] public EventCallback<(Guid Id, SessionRsvpStatus Status)> OnRsvp { get; set; }
+    [Parameter] public EventCallback<(Guid SessionId, string UserId, bool Undo)> OnManagerCheckIn { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool IsPast => Event.ScheduledAt < DateTimeOffset.UtcNow.AddHours(-6);
+
+    private bool NearNow => !Event.IsCancelled && Event.IsPublished
+        && DateTimeOffset.UtcNow >= Event.ScheduledAt.AddHours(-3)
+        && DateTimeOffset.UtcNow <= (Event.EndsAt ?? Event.ScheduledAt.AddHours(4)).AddHours(6);
+
+    private bool UsesWholeDay =>
+        Nested
+        && DayStart is DateTimeOffset start
+        && DayEnd is DateTimeOffset end
+        && Event.ScheduledAt == start
+        && Event.EndsAt == end;
+
+    private string? PaperStyle => Event.IsCancelled ? "opacity:.75" : Event.IsPublished ? null : "border-style:dashed";
+
+    private string NestedClass
+    {
+        get
+        {
+            var classes = "mt-2 ml-4";
+            if (Event.IsCancelled)
+                classes += " game-day-game-cancelled";
+            if (!Event.IsPublished)
+                classes += " game-day-game-draft";
+            return classes;
+        }
+    }
+}

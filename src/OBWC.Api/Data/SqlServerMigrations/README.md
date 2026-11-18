@@ -7,6 +7,9 @@ The SQL Server history is:
 1. `InitialCreate` — the model as first generated for SQL Server.
 2. `IdentitySchemaVersion3` — widens nothing; it shortens the Identity token and login key columns to 128 characters and recreates the primary keys, which SQL Server will not alter in place. The API runs Identity schema version 3.
 3. `ClubContentMaintenance` — officer contact and photo, area-group game focus and contact, convention start and end dates (drops `WhenText`), document visibility (existing rows become `MembersOnly`), and `EventPhotos`.
+4. `CustomRuleSetName` — optional rule set name typed on a game when it is not on the club list.
+5. `GameDays` — a game day hosts games. Games may set `PlaySessions.GameDayId`. Rows that never answered (RSVP Unknown, and not checked in) are removed.
+6. `HostName` — optional name of the person running a game, when that is someone other than the member who entered it.
 
 `dotnet ef` follows `Database__Provider`. From the repository root, after `dotnet tool restore`:
 

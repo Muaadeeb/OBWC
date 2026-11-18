@@ -179,6 +179,7 @@ public class CalendarBehaviorTests(ApiFactory factory) : IClassFixture<ApiFactor
                 EndsAt = DateTimeOffset.UtcNow.AddDays(1).AddHours(4),
                 Title = "Night 1",
                 Notes = "Notes",
+                HostName = "Jason Huffstedtler",
                 IsPublished = true,
                 Venue = "Game Shop",
                 Address = "1 Table Rd",
@@ -197,6 +198,7 @@ public class CalendarBehaviorTests(ApiFactory factory) : IClassFixture<ApiFactor
         Assert.Contains("LOCATION:Game Shop\\, 1 Table Rd", sample, StringComparison.Ordinal);
         Assert.Contains("Door code 12", sample, StringComparison.Ordinal);
         Assert.Contains("Night 1", sample, StringComparison.Ordinal);
+        Assert.Contains("Host: Jason Huffstedtler", sample, StringComparison.Ordinal);
         Assert.DoesNotContain("Cancelled night", sample, StringComparison.Ordinal);
         Assert.Contains("BEGIN:VCALENDAR", sample, StringComparison.Ordinal);
     }
