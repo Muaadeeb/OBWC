@@ -6,6 +6,12 @@
 <PageTitle>Club documents · OBWC</PageTitle>
 <h1>Club documents</h1>
 <p class="lede">Upload, rename, or delete a PDF: constitution, budget, or minutes. Each file is members only unless you mark it public. Uploaded times are stored in UTC and shown as Central Time (CT).</p>
+<MudStack Row="true" Spacing="3" Class="flex-wrap mb-3">
+    <MudLink Href="/documents">View club documents</MudLink>
+    <MudLink Href="@DocumentLinks.Page(DocumentCategory.Constitution)">Constitution</MudLink>
+    <MudLink Href="@DocumentLinks.Page(DocumentCategory.Budget)">Budget</MudLink>
+    <MudLink Href="@DocumentLinks.Page(DocumentCategory.Minutes)">Minutes</MudLink>
+</MudStack>
 
 @if (_loading)
 {

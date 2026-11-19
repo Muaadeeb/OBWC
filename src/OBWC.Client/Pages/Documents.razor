@@ -6,6 +6,11 @@
 <PageTitle>Club documents · OBWC</PageTitle>
 <h1>Club documents</h1>
 <p class="lede">Public files are listed for everyone. Members-only files appear after you sign in. Uploaded times are Central Time (CT).</p>
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <p><MudLink Href="/admin/documents">Maintain these documents</MudLink></p>
+    </Authorized>
+</AuthorizeView>
 
 @if (_loading)
 {
@@ -23,7 +28,14 @@ else
 {
     @foreach (var group in _docs.GroupBy(doc => doc.Category))
     {
-        <h2>@CategoryLabel(group.Key)</h2>
+        <AuthorizeView Roles="Member,Admin,SuperAdmin,GM">
+            <Authorized>
+                <h2><MudLink Href="@DocumentLinks.Page(group.Key)">@DocumentLinks.Label(group.Key)</MudLink></h2>
+            </Authorized>
+            <NotAuthorized>
+                <h2>@DocumentLinks.Label(group.Key)</h2>
+            </NotAuthorized>
+        </AuthorizeView>
         <MudList T="ClubDocumentDto">
             @foreach (var doc in group)
             {
@@ -63,14 +75,6 @@ else
         }
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
-
-    private static string CategoryLabel(DocumentCategory category) => category switch
-    {
-        DocumentCategory.Constitution => "Constitution",
-        DocumentCategory.Budget => "Budget",
-        DocumentCategory.Minutes => "Minutes",
-        _ => category.ToString()
-    };
 
     private static DateTimeOffset AsUtc(DateTime value) =>
         new(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero);

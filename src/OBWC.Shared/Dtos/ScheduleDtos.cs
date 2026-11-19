@@ -13,7 +13,10 @@ public record CreateSessionRequest
     [MaxLength(1000)]
     public string? Notes { get; init; }
 
-    [MaxLength(160)]
+    /// <summary>Club venue. When set, that venue's name and address are stored on the game.</summary>
+    public Guid? VenueId { get; init; }
+
+    [MaxLength(200)]
     public string? Venue { get; init; }
 
     [MaxLength(300)]
@@ -57,7 +60,10 @@ public record UpdateSessionDetailsRequest
     [MaxLength(1000)]
     public string? Notes { get; init; }
 
-    [MaxLength(160)]
+    /// <summary>Club venue. When set, that venue's name and address are stored on the game.</summary>
+    public Guid? VenueId { get; init; }
+
+    [MaxLength(200)]
     public string? Venue { get; init; }
 
     [MaxLength(300)]
@@ -140,6 +146,7 @@ public record CalendarEventDto
     public Guid? SeriesKey { get; init; }
     public string? Venue { get; init; }
     public string? Address { get; init; }
+    public Guid? VenueId { get; init; }
     public string? OnlineLink { get; init; }
     public string? LocationNotes { get; init; }
     public int? PlayerCap { get; init; }
@@ -188,7 +195,10 @@ public record CreateGameDayRequest
     [MaxLength(1000)]
     public string? Notes { get; init; }
 
-    [MaxLength(160)]
+    /// <summary>Club venue. When set, that venue's name and address are stored on the game day.</summary>
+    public Guid? VenueId { get; init; }
+
+    [MaxLength(200)]
     public string? Venue { get; init; }
 
     [MaxLength(300)]
@@ -214,7 +224,10 @@ public record UpdateGameDayRequest
     [MaxLength(1000)]
     public string? Notes { get; init; }
 
-    [MaxLength(160)]
+    /// <summary>Club venue. When set, that venue's name and address are stored on the game day.</summary>
+    public Guid? VenueId { get; init; }
+
+    [MaxLength(200)]
     public string? Venue { get; init; }
 
     [MaxLength(300)]
@@ -236,6 +249,7 @@ public record GameDayDto
     public string? Notes { get; init; }
     public string? Venue { get; init; }
     public string? Address { get; init; }
+    public Guid? VenueId { get; init; }
     public string? OnlineLink { get; init; }
     public string? LocationNotes { get; init; }
     public bool IsPublished { get; init; }

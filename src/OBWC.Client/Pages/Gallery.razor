@@ -5,6 +5,11 @@
 <PageTitle>Gallery · OBWC</PageTitle>
 <h1>Gallery</h1>
 <p class="lede">Photos of OBWC games at public events. An admin keeps this gallery. @_count</p>
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <p><MudLink Href="/admin/gallery">Maintain this gallery</MudLink></p>
+    </Authorized>
+</AuthorizeView>
 
 @if (_loading)
 {

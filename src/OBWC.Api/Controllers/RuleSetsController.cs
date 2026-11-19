@@ -71,6 +71,8 @@ public class RuleSetsController(ApplicationDbContext db, IAuthorizationService a
         var entity = await db.RuleSets.SingleOrDefaultAsync(ruleSet => ruleSet.Id == id, cancellationToken);
         if (entity is null)
             return NotFound();
+        if (await db.PlaySessions.AnyAsync(session => session.RuleSetId == id, cancellationToken))
+            return ConflictProblem("This rule set is still used by a scheduled game.");
         db.RuleSets.Remove(entity);
         try
         {

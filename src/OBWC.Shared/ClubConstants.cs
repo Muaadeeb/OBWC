@@ -26,12 +26,29 @@ public static class GalleryLimits
 
 public static class ContentKeys
 {
+    public const string Home = "home";
     public const string About = "about";
     public const string NukeCon = "nuke-con";
 
     public static bool IsKnown(string? key) =>
-        string.Equals(key, About, StringComparison.OrdinalIgnoreCase)
+        string.Equals(key, Home, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, About, StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, NukeCon, StringComparison.OrdinalIgnoreCase);
+
+    public static bool HasPhoto(string? key) =>
+        string.Equals(key, Home, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, About, StringComparison.OrdinalIgnoreCase);
+
+    public static string? Canonical(string? key)
+    {
+        if (string.Equals(key, Home, StringComparison.OrdinalIgnoreCase))
+            return Home;
+        if (string.Equals(key, About, StringComparison.OrdinalIgnoreCase))
+            return About;
+        if (string.Equals(key, NukeCon, StringComparison.OrdinalIgnoreCase))
+            return NukeCon;
+        return null;
+    }
 }
 
 public static class SettingKeys

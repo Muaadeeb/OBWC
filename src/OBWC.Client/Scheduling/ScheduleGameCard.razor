@@ -1,7 +1,8 @@
+<div id="@ScheduleLinks.GameElement(Event.Id)" class="@(Focused ? "schedule-focus" : null)">
 @if (Nested)
 {
     <MudExpansionPanels Class="@NestedClass" Elevation="0">
-        <MudExpansionPanel>
+        <MudExpansionPanel @bind-Expanded="_panelOpen">
             <TitleContent>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap flex-grow-1">
                     <MudText Typo="Typo.body2">@(UsesWholeDay ? "Whole game day" : ClubTime.FormatTimeRange(Event.ScheduledAt, Event.EndsAt))</MudText>
@@ -43,6 +44,7 @@ else
         @CardBody
     </MudPaper>
 }
+</div>
 
 @code {
     private RenderFragment CardBody => @<MudStack Row="true" AlignItems="AlignItems.Start" Class="flex-wrap">
@@ -70,7 +72,7 @@ else
             <MudText Typo="@(Nested ? Typo.subtitle1 : Typo.h6)">@(string.IsNullOrWhiteSpace(Event.Title) ? "Club game" : Event.Title)</MudText>
             @if (!Nested)
             {
-                <MudText Typo="Typo.caption">@Event.Venue @(!string.IsNullOrWhiteSpace(Event.Address) ? " · " + Event.Address : "")</MudText>
+                <MudText Typo="Typo.caption"><PlaceLine VenueId="Event.VenueId" Venue="Event.Venue" Address="Event.Address" /></MudText>
             }
             @if (!string.IsNullOrWhiteSpace(Event.RuleSetName))
             {
@@ -174,6 +176,7 @@ else
     [Parameter, EditorRequired] public CalendarEventDto Event { get; set; } = null!;
     [Parameter] public bool Busy { get; set; }
     [Parameter] public bool Expanded { get; set; }
+    [Parameter] public bool Focused { get; set; }
     [Parameter] public bool Nested { get; set; }
     [Parameter] public DateTimeOffset? DayStart { get; set; }
     [Parameter] public DateTimeOffset? DayEnd { get; set; }
@@ -188,6 +191,20 @@ else
     [Parameter] public EventCallback<(Guid Id, SessionRsvpStatus Status)> OnRsvp { get; set; }
     [Parameter] public EventCallback<(Guid SessionId, string UserId, bool Undo)> OnManagerCheckIn { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool _panelOpen;
+    private bool _openedForFocus;
+
+    protected override void OnParametersSet()
+    {
+        if (!Focused)
+            _openedForFocus = false;
+        else if (!_openedForFocus)
+        {
+            _panelOpen = true;
+            _openedForFocus = true;
+        }
+    }
 
     private bool IsPast => Event.ScheduledAt < DateTimeOffset.UtcNow.AddHours(-6);
 

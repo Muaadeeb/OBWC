@@ -1,0 +1,18 @@
+@if (VenueId is Guid id && !string.IsNullOrWhiteSpace(Venue))
+{
+    <MudLink Href="@VenueLinks.Page(id)">@Venue</MudLink>
+}
+else if (!string.IsNullOrWhiteSpace(Venue))
+{
+    @Venue
+}
+@if (!string.IsNullOrWhiteSpace(Address))
+{
+    @((string.IsNullOrWhiteSpace(Venue) ? "" : " · ") + Address)
+}
+
+@code {
+    [Parameter] public Guid? VenueId { get; set; }
+    [Parameter] public string? Venue { get; set; }
+    [Parameter] public string? Address { get; set; }
+}

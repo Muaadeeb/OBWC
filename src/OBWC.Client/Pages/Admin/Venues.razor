@@ -6,7 +6,7 @@
 
 <PageTitle>Venues · OBWC</PageTitle>
 <h1>Venues</h1>
-<p class="lede">A GM or an admin can add a place the club uses: name, address, notes, and photos. The public venues page reads this list.</p>
+<p class="lede">A GM or an admin can add a place the club uses: name, address, notes, and photos. The public <MudLink Href="/venues">venues page</MudLink> reads this list.</p>
 
 @if (_loading)
 {
@@ -23,7 +23,8 @@ else if (_venues.Count == 0)
 
 @foreach (var venue in _venues)
 {
-    <MudPaper Class="pa-3 mb-3" Outlined="true">
+    var venueId = venue.Id;
+    <MudPaper @key="venueId" Class="pa-3 mb-3" Outlined="true">
         <h2>@venue.Name</h2>
         @if (!string.IsNullOrWhiteSpace(venue.Address)) { <p>@venue.Address</p> }
         @if (!string.IsNullOrWhiteSpace(venue.Description)) { <p style="white-space:pre-wrap">@venue.Description</p> }
@@ -33,12 +34,12 @@ else if (_venues.Count == 0)
         </div>
         <MudStack Row="true" Class="flex-wrap mt-2">
             <div>
-                <label>Inside photo <InputFile OnChange="e => _inside[venue.Id] = e.File" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
-                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Upload(venue.Id, true)">Upload inside</MudButton>
+                <label>Inside photo <InputFile @key="@($"in-{venueId}-{InputGeneration(venueId, true)}")" OnChange="e => _inside[venueId] = e.File" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Upload(venueId, true)">Upload inside</MudButton>
             </div>
             <div>
-                <label>Outside photo <InputFile OnChange="e => _outside[venue.Id] = e.File" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
-                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Upload(venue.Id, false)">Upload outside</MudButton>
+                <label>Outside photo <InputFile @key="@($"out-{venueId}-{InputGeneration(venueId, false)}")" OnChange="e => _outside[venueId] = e.File" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Upload(venueId, false)">Upload outside</MudButton>
             </div>
         </MudStack>
         <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => Edit(venue)">Edit</MudButton>
@@ -63,6 +64,8 @@ else if (_venues.Count == 0)
     private List<VenueDto> _venues = [];
     private readonly Dictionary<Guid, IBrowserFile?> _inside = [];
     private readonly Dictionary<Guid, IBrowserFile?> _outside = [];
+    private readonly Dictionary<Guid, int> _insideGeneration = [];
+    private readonly Dictionary<Guid, int> _outsideGeneration = [];
     private Guid? _editing;
     private bool _loading = true;
     private bool _busy;
@@ -153,9 +156,27 @@ else if (_venues.Count == 0)
             await stream.CopyToAsync(buffer);
             var bytes = buffer.ToArray();
             await Club.UploadVenuePhotosAsync(id, inside ? bytes : null, inside ? file.Name : null, inside ? null : bytes, inside ? null : file.Name);
+            ClearChosenPhoto(id, inside);
             await Load();
             Snackbar.Add("Photo saved.", Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private int InputGeneration(Guid id, bool inside) =>
+        (inside ? _insideGeneration : _outsideGeneration).GetValueOrDefault(id);
+
+    private void ClearChosenPhoto(Guid id, bool inside)
+    {
+        if (inside)
+        {
+            _inside.Remove(id);
+            _insideGeneration[id] = InputGeneration(id, true) + 1;
+        }
+        else
+        {
+            _outside.Remove(id);
+            _outsideGeneration[id] = InputGeneration(id, false) + 1;
+        }
     }
 }

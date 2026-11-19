@@ -79,6 +79,17 @@ public class VenuesController(ApplicationDbContext db, FileStorage files) : Club
         var venue = await db.Venues.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (venue is null)
             return NotFound();
+
+        // Drop the link only. The copied name and address stay on each game and game day.
+        var sessions = await db.PlaySessions.Where(session => session.VenueId == id).ToListAsync(cancellationToken);
+        foreach (var session in sessions)
+            session.VenueId = null;
+        var days = await db.GameDays.Where(day => day.VenueId == id).ToListAsync(cancellationToken);
+        foreach (var day in days)
+            day.VenueId = null;
+        if (sessions.Count > 0 || days.Count > 0)
+            await db.SaveChangesAsync(cancellationToken);
+
         db.Venues.Remove(venue);
         try
         {
@@ -110,8 +121,16 @@ public class VenuesController(ApplicationDbContext db, FileStorage files) : Club
         Description = venue.Description,
         HasInsidePhoto = venue.InsidePhotoPath is not null,
         HasOutsidePhoto = venue.OutsidePhotoPath is not null,
-        InsidePhotoUrl = venue.InsidePhotoPath is null ? null : $"api/files/venues/{venue.Id}/inside",
-        OutsidePhotoUrl = venue.OutsidePhotoPath is null ? null : $"api/files/venues/{venue.Id}/outside",
+        InsidePhotoUrl = PhotoAddress(venue.Id, "inside", venue.InsidePhotoPath),
+        OutsidePhotoUrl = PhotoAddress(venue.Id, "outside", venue.OutsidePhotoPath),
         SortOrder = venue.SortOrder
     };
+
+    private static string? PhotoAddress(Guid id, string side, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+        var version = Path.GetFileNameWithoutExtension(path);
+        return $"api/files/venues/{id}/{side}?v={version}";
+    }
 }

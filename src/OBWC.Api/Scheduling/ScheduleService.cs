@@ -26,6 +26,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         string? customRuleSetName = null,
         Guid? gameDayId = null,
         string? hostName = null,
+        Guid? venueId = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(createdByUserId))
@@ -43,6 +44,26 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         else if (ruleSetId is Guid ruleId && !await db.RuleSets.AnyAsync(ruleSet => ruleSet.Id == ruleId, cancellationToken))
             return (false, null, "That rule set is not on the club list.");
 
+        string? storedVenue;
+        string? storedAddress;
+        Guid? storedVenueId;
+        if (gameDayId is null)
+        {
+            var place = await ResolvePlaceAsync(venueId, venue, address, requirePlace: false, cancellationToken);
+            if (!place.Ok)
+                return (false, null, place.Error);
+            storedVenueId = place.VenueId;
+            storedVenue = place.Venue;
+            storedAddress = place.Address;
+        }
+        else
+        {
+            // A game posted on a game day uses that day's place.
+            storedVenueId = null;
+            storedVenue = Clean(venue);
+            storedAddress = Clean(address);
+        }
+
         var session = new PlaySession
         {
             Id = Guid.NewGuid(),
@@ -50,8 +71,9 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             EndsAt = endsAt?.UtcDateTime,
             Title = Clean(title),
             Notes = Clean(notes),
-            Venue = Clean(venue),
-            Address = Clean(address),
+            Venue = storedVenue,
+            Address = storedAddress,
+            VenueId = storedVenueId,
             OnlineLink = Clean(onlineLink),
             LocationNotes = Clean(locationNotes),
             PlayerCap = playerCap,
@@ -104,7 +126,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
                 start, end, title, request.Notes, createdByUserId,
                 request.IsPublished, request.AllowPlayerRsvp,
                 request.Venue, request.Address, request.OnlineLink, request.LocationNotes,
-                request.PlayerCap, ruleSetId, customRuleSetName, null, request.HostName, cancellationToken);
+                request.PlayerCap, ruleSetId, customRuleSetName, null, request.HostName, request.VenueId, cancellationToken);
             if (!ok || session is null)
             {
                 lastError = error;
@@ -167,7 +189,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             start, end, request.Title, request.Notes, createdByUserId,
             request.IsPublished, request.AllowPlayerRsvp,
             request.Venue, request.Address, request.OnlineLink, request.LocationNotes,
-            request.PlayerCap, ruleSetId, customRuleSetName, day.Id, request.HostName, cancellationToken);
+            request.PlayerCap, ruleSetId, customRuleSetName, day.Id, request.HostName, request.VenueId, cancellationToken);
         return ok && session is not null
             ? (true, 1, session.Id, null)
             : (false, 0, null, error ?? "Could not add the game.");
@@ -183,7 +205,9 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         var query = db.PlaySessions.AsNoTracking()
             .Include(session => session.Attendances)
             .Include(session => session.RuleSet)
-            .Include(session => session.GameDay)
+            .Include(session => session.ListedVenue)
+            .Include(session => session.GameDay!)
+                .ThenInclude(day => day.ListedVenue)
             .Where(session => session.ScheduledAt >= from && session.ScheduledAt <= to);
         if (!includeAllUnpublished)
         {
@@ -196,7 +220,12 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
     }
 
     public Task<PlaySession?> GetSessionAsync(Guid id, CancellationToken cancellationToken = default) =>
-        db.PlaySessions.Include(session => session.Attendances).Include(session => session.RuleSet).Include(session => session.GameDay)
+        db.PlaySessions
+            .Include(session => session.Attendances)
+            .Include(session => session.RuleSet)
+            .Include(session => session.ListedVenue)
+            .Include(session => session.GameDay!)
+                .ThenInclude(day => day.ListedVenue)
             .FirstOrDefaultAsync(session => session.Id == id, cancellationToken);
 
     public async Task<(bool Ok, string? Note, SessionRsvpStatus Status)> SetPlayerRsvpAsync(
@@ -284,8 +313,12 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         session.Notes = Clean(request.Notes);
         if (session.GameDayId is null)
         {
-            session.Venue = Clean(request.Venue);
-            session.Address = Clean(request.Address);
+            var place = await ResolvePlaceAsync(request.VenueId, request.Venue, request.Address, requirePlace: false, cancellationToken);
+            if (!place.Ok)
+                return (false, place.Error);
+            session.VenueId = place.VenueId;
+            session.Venue = place.Venue;
+            session.Address = place.Address;
             session.OnlineLink = Clean(request.OnlineLink);
             session.LocationNotes = Clean(request.LocationNotes);
         }
@@ -673,8 +706,9 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             return (false, 0, null, "A game day needs a start and an end.");
         if (endsAt <= request.ScheduledAt)
             return (false, 0, null, "End time must be after the start time.");
-        if (Clean(request.Venue) is null && Clean(request.Address) is null)
-            return (false, 0, null, "A game day needs a venue or an address.");
+        var place = await ResolvePlaceAsync(request.VenueId, request.Venue, request.Address, requirePlace: true, cancellationToken);
+        if (!place.Ok)
+            return (false, 0, null, place.Error);
 
         var weeks = Math.Clamp(request.Weeks <= 0 ? 1 : request.Weeks, 1, 26);
         Guid? seriesKey = weeks > 1 ? Guid.NewGuid() : null;
@@ -692,8 +726,9 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
                 EndsAt = endsAt.AddDays(7 * week).UtcDateTime,
                 Title = title,
                 Notes = Clean(request.Notes),
-                Venue = Clean(request.Venue),
-                Address = Clean(request.Address),
+                VenueId = place.VenueId,
+                Venue = place.Venue,
+                Address = place.Address,
                 OnlineLink = Clean(request.OnlineLink),
                 LocationNotes = Clean(request.LocationNotes),
                 CreatedByUserId = createdByUserId,
@@ -718,6 +753,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         CancellationToken cancellationToken = default)
     {
         var query = db.GameDays.AsNoTracking()
+            .Include(day => day.ListedVenue)
             .Include(day => day.Games).ThenInclude(game => game.Attendances)
             .Include(day => day.Games).ThenInclude(game => game.RuleSet)
             .Where(day => day.ScheduledAt <= to && day.EndsAt >= from);
@@ -746,6 +782,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         CancellationToken cancellationToken = default)
     {
         var day = await db.GameDays.AsNoTracking()
+            .Include(item => item.ListedVenue)
             .Include(item => item.Games).ThenInclude(game => game.Attendances)
             .Include(item => item.Games).ThenInclude(game => game.RuleSet)
             .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
@@ -766,8 +803,9 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
         UpdateGameDayRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (Clean(request.Venue) is null && Clean(request.Address) is null)
-            return (false, "A game day needs a venue or an address.");
+        var place = await ResolvePlaceAsync(request.VenueId, request.Venue, request.Address, requirePlace: true, cancellationToken);
+        if (!place.Ok)
+            return (false, place.Error);
         var day = await db.GameDays.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (day is null)
             return (false, "That game day was not found.");
@@ -776,8 +814,9 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
 
         day.Title = Clean(request.Title);
         day.Notes = Clean(request.Notes);
-        day.Venue = Clean(request.Venue);
-        day.Address = Clean(request.Address);
+        day.VenueId = place.VenueId;
+        day.Venue = place.Venue;
+        day.Address = place.Address;
         day.OnlineLink = Clean(request.OnlineLink);
         day.LocationNotes = Clean(request.LocationNotes);
         await db.SaveChangesAsync(cancellationToken);
@@ -936,6 +975,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             return (false, "This game is not on a game day.");
 
         var day = session.GameDay;
+        session.VenueId ??= day.VenueId;
         session.Venue = Clean(session.Venue) ?? day.Venue;
         session.Address = Clean(session.Address) ?? day.Address;
         session.OnlineLink = Clean(session.OnlineLink) ?? day.OnlineLink;
@@ -1004,6 +1044,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
                 .Select(row => row.UserId)
                 .Distinct(StringComparer.Ordinal)
                 .Count();
+            var place = ShownPlace(day.VenueId, day.ListedVenue, day.Venue, day.Address);
             return new GameDayDto
             {
                 Id = day.Id,
@@ -1011,8 +1052,9 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
                 EndsAt = AsOffset(day.EndsAt),
                 Title = day.Title,
                 Notes = day.Notes,
-                Venue = day.Venue,
-                Address = day.Address,
+                Venue = place.Name,
+                Address = place.Address,
+                VenueId = place.Id,
                 OnlineLink = day.OnlineLink,
                 LocationNotes = day.LocationNotes,
                 IsPublished = day.IsPublished,
@@ -1023,7 +1065,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
                 OwnerDisplayName = string.IsNullOrWhiteSpace(ownerName) ? "Member" : ownerName,
                 CanEdit = viewerIsAdmin || (!string.IsNullOrEmpty(viewerUserId) && viewerUserId == day.CreatedByUserId),
                 PlayersGoing = going,
-                LocationDisplay = FormatLocation(day.Venue, day.Address, day.LocationNotes),
+                LocationDisplay = FormatLocation(place.Name, place.Address, day.LocationNotes),
                 Games = games
             };
         }).ToList();
@@ -1050,6 +1092,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             SeriesKey = day.SeriesKey,
             Venue = day.Venue,
             Address = day.Address,
+            VenueId = day.VenueId,
             OnlineLink = day.OnlineLink,
             LocationNotes = day.LocationNotes,
             RuleSetName = titles.Count == 0 ? "No games posted yet" : string.Join(", ", titles),
@@ -1184,8 +1227,11 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             ? rows.Count(row => row.RsvpStatus == SessionRsvpStatus.Going && row.Status != AttendanceStatus.Present)
             : 0;
         var day = session.GameDay;
-        var venue = day is null ? session.Venue : day.Venue;
-        var address = day is null ? session.Address : day.Address;
+        var place = day is null
+            ? ShownPlace(session.VenueId, session.ListedVenue, session.Venue, session.Address)
+            : ShownPlace(day.VenueId, day.ListedVenue, day.Venue, day.Address);
+        var venue = place.Name;
+        var address = place.Address;
         var online = day is null ? session.OnlineLink : day.OnlineLink;
         var locationNotes = day is null ? session.LocationNotes : day.LocationNotes;
         names.TryGetValue(session.CreatedByUserId, out var ownerName);
@@ -1209,6 +1255,7 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
             SeriesKey = session.SeriesKey,
             Venue = venue,
             Address = address,
+            VenueId = place.Id,
             OnlineLink = online,
             LocationNotes = locationNotes,
             PlayerCap = session.PlayerCap,
@@ -1249,6 +1296,58 @@ public sealed class ScheduleService(ApplicationDbContext db, IClubMailer mail)
 
     private static DateTimeOffset AsOffset(DateTime value) =>
         new(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero);
+
+    /// <summary>
+    /// A listed id wins. A typed name that matches one club venue uses that venue and copies its address.
+    /// Any other name is stored as written and is not added to the club list. The stored name fits the schedule column.
+    /// </summary>
+    private async Task<(bool Ok, Guid? VenueId, string? Venue, string? Address, string? Error)> ResolvePlaceAsync(
+        Guid? venueId,
+        string? venue,
+        string? address,
+        bool requirePlace,
+        CancellationToken cancellationToken)
+    {
+        if (venueId is Guid id)
+        {
+            var listed = await db.Venues.AsNoTracking().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+            if (listed is null)
+                return (false, null, null, null, "That venue is not on the club list.");
+            return (true, listed.Id, FitVenueName(listed.Name), Clean(listed.Address), null);
+        }
+
+        var typed = Clean(venue);
+        if (typed is not null)
+        {
+            var matches = await db.Venues.AsNoTracking()
+                .Where(item => item.Name.ToLower() == typed.ToLower())
+                .OrderBy(item => item.Id)
+                .Take(2)
+                .ToListAsync(cancellationToken);
+            if (matches.Count == 1)
+            {
+                var listed = matches[0];
+                return (true, listed.Id, FitVenueName(listed.Name), Clean(listed.Address), null);
+            }
+        }
+
+        var storedVenue = FitVenueName(typed);
+        var storedAddress = Clean(address);
+        if (requirePlace && storedVenue is null && storedAddress is null)
+            return (false, null, null, null, "A game day needs a venue or an address.");
+        return (true, null, storedVenue, storedAddress, null);
+    }
+
+    private static (Guid? Id, string? Name, string? Address) ShownPlace(Guid? venueId, Venue? listed, string? name, string? address) =>
+        listed is null ? (venueId, name, address) : (listed.Id, listed.Name, listed.Address);
+
+    private static string? FitVenueName(string? value)
+    {
+        var cleaned = Clean(value);
+        if (cleaned is null || cleaned.Length <= 160)
+            return cleaned;
+        return cleaned[..160];
+    }
 
     /// <summary>
     /// A typed name wins over a listed id. A name that matches the club list uses that rule set.

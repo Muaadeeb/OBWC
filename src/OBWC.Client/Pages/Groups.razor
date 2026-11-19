@@ -4,6 +4,11 @@
 <PageTitle>Other Area Gaming Groups · OBWC</PageTitle>
 <h1>Other Area Gaming Groups</h1>
 <p class="lede">Groups the club wants visitors to know about.</p>
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <p><MudLink Href="/admin/groups">Maintain this list</MudLink></p>
+    </Authorized>
+</AuthorizeView>
 
 @if (_loading)
 {

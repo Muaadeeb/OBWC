@@ -1,0 +1,50 @@
+<MudAutocomplete T="string" Value="_text" ValueChanged="OnValueChanged" Label="Venue" Variant="Variant.Outlined"
+                 Margin="Margin.Dense" Clearable="true" CoerceValue="false" ResetValueOnEmptyText="true"
+                 MaxItems="60" MaxLength="200" SearchFunc="Search" Validation="Validation"
+                 HelperText="Choose a listed venue, or type a place that is not listed." />
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public Guid? VenueId { get; set; }
+    [Parameter] public EventCallback<Guid?> VenueIdChanged { get; set; }
+    [Parameter] public IReadOnlyList<VenueDto> Venues { get; set; } = [];
+    [Parameter] public Func<string, string?>? Validation { get; set; }
+    [Parameter] public EventCallback<VenueDto?> ListedChanged { get; set; }
+
+    private string _text = "";
+
+    protected override void OnParametersSet()
+    {
+        _text = Value ?? "";
+    }
+
+    private async Task OnValueChanged(string? value)
+    {
+        var match = Unique(value);
+        var text = string.IsNullOrWhiteSpace(match?.Name ?? value) ? null : (match?.Name ?? value)!.Trim();
+        _text = text ?? "";
+        await ValueChanged.InvokeAsync(text);
+        await VenueIdChanged.InvokeAsync(match?.Id);
+        await ListedChanged.InvokeAsync(match);
+    }
+
+    private VenueDto? Unique(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+        var matches = Venues
+            .Where(venue => string.Equals(venue.Name, text.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToList();
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
+    private Task<IEnumerable<string>> Search(string? text, CancellationToken _)
+    {
+        IEnumerable<string> names = Venues.Select(venue => venue.Name);
+        if (!string.IsNullOrWhiteSpace(text))
+            names = names.Where(name => name.Contains(text, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(names);
+    }
+}

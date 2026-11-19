@@ -1,10 +1,16 @@
 @page "/venues"
 @inject ClubApi Club
 @inject ApiOrigin Origin
+@inject IJSRuntime Js
 
 <PageTitle>Venues · OBWC</PageTitle>
 <h1>Venues</h1>
 <p class="lede">Places the club uses. The list is kept by a GM or an admin.</p>
+<AuthorizeView Roles="GM,Admin,SuperAdmin">
+    <Authorized>
+        <p><MudLink Href="/admin/venues">Maintain this list</MudLink></p>
+    </Authorized>
+</AuthorizeView>
 
 @if (_loading)
 {
@@ -19,13 +25,19 @@ else if (_venues.Count == 0)
     <MudAlert Severity="Severity.Info">No venues have been entered yet.</MudAlert>
 }
 
+@if (_focusMissing)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">That venue is not on this list.</MudAlert>
+}
+
 @foreach (var venue in _venues)
 {
+    <div id="@VenueLinks.Element(venue.Id)" class="@FocusClass(venue.Id)">
     <MudPaper Class="pa-3 mb-3" Outlined="true">
         <h2>@venue.Name</h2>
         @if (!string.IsNullOrWhiteSpace(venue.Address))
         {
-            <p>@venue.Address</p>
+            <p><MudLink Href="@ContactLinks.ForAddress(venue.Address)" Target="_blank">@venue.Address</MudLink></p>
         }
         @if (!string.IsNullOrWhiteSpace(venue.Description))
         {
@@ -45,12 +57,16 @@ else if (_venues.Count == 0)
             </div>
         }
     </MudPaper>
+    </div>
 }
 
 @code {
     private List<VenueDto> _venues = [];
     private bool _loading = true;
     private string? _error;
+    private string? _focusId;
+    private string? _scrolledId;
+    private bool _focusMissing;
 
     protected override async Task OnInitializedAsync()
     {
@@ -58,4 +74,40 @@ else if (_venues.Count == 0)
         catch (ClubApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_loading)
+            return;
+
+        var fragment = await Js.InvokeAsync<string>("obwcScroll.fragment");
+        if (string.IsNullOrEmpty(fragment) || fragment == _scrolledId)
+            return;
+
+        var known = _venues.Any(venue => VenueLinks.Element(venue.Id) == fragment);
+        var missing = !known && IsVenueElement(fragment);
+        var focusId = known ? fragment : null;
+        if (_focusId != focusId || _focusMissing != missing)
+        {
+            _focusId = focusId;
+            _focusMissing = missing;
+            StateHasChanged();
+            return;
+        }
+
+        if (!known)
+        {
+            _scrolledId = fragment;
+            return;
+        }
+
+        if (await Js.InvokeAsync<bool>("obwcScroll.toId", fragment))
+            _scrolledId = fragment;
+    }
+
+    private string FocusClass(Guid id) =>
+        _focusId == VenueLinks.Element(id) ? "venue-anchor schedule-focus" : "venue-anchor";
+
+    private static bool IsVenueElement(string id) =>
+        id.StartsWith("venue-", StringComparison.Ordinal) && Guid.TryParse(id["venue-".Length..], out _);
 }

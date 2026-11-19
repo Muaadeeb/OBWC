@@ -12,6 +12,23 @@ window.obwcStorage = {
     remove: (key) => localStorage.removeItem(key)
 };
 
+window.obwcScroll = {
+    toId: (id) => {
+        const element = document.getElementById(id);
+        if (!element)
+            return false;
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+        return true;
+    },
+    fragment: () => {
+        const hash = window.location.hash;
+        if (!hash || hash.length < 2)
+            return "";
+        try { return decodeURIComponent(hash.substring(1)); }
+        catch { return hash.substring(1); }
+    }
+};
+
 window.obwcDownload = (fileName, bytes) => {
     const blob = new Blob([new Uint8Array(bytes)]);
     const url = URL.createObjectURL(blob);

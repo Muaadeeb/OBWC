@@ -69,11 +69,12 @@ else
                                       MaxLength="200" HelperText="Who is running this game." />
                     </MudItem>
                     <MudItem xs="12" md="4">
-                        <MudTextField @bind-Value="_venue" @bind-Value:after="SyncGamePlace" Label="Venue" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                      Validation="@(new Func<string, string?>(ValidateGameVenue))" />
+                        <VenueField @bind-Value="_venue" @bind-VenueId="_venueId" Venues="_venues" ListedChanged="OnGameVenueListed"
+                                    Validation="@(new Func<string, string?>(ValidateGameVenue))" />
                     </MudItem>
                     <MudItem xs="12" md="4">
                         <MudTextField @bind-Value="_address" @bind-Value:after="SyncGamePlace" Label="Address" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      ReadOnly="@(_venueId is not null)" HelperText="@ListedAddressHelp(_venueId)"
                                       Validation="@(new Func<string, string?>(ValidateGameAddress))" />
                     </MudItem>
                     <MudItem xs="12" md="4"><MudTextField @bind-Value="_online" Label="Discord / online link" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
@@ -123,11 +124,12 @@ else
                                       Validation="@(new Func<string, string?>(ValidateDayTitle))" />
                     </MudItem>
                     <MudItem xs="12" md="4">
-                        <MudTextField @bind-Value="_dayVenue" @bind-Value:after="SyncDayPlace" Label="Venue" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                      Validation="@(new Func<string, string?>(ValidateDayVenue))" />
+                        <VenueField @bind-Value="_dayVenue" @bind-VenueId="_dayVenueId" Venues="_venues" ListedChanged="OnDayVenueListed"
+                                    Validation="@(new Func<string, string?>(ValidateDayVenue))" />
                     </MudItem>
                     <MudItem xs="12" md="4">
                         <MudTextField @bind-Value="_dayAddress" @bind-Value:after="SyncDayPlace" Label="Address" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      ReadOnly="@(_dayVenueId is not null)" HelperText="@ListedAddressHelp(_dayVenueId)"
                                       Validation="@(new Func<string, string?>(ValidateDayAddress))" />
                     </MudItem>
                     <MudItem xs="12" md="4"><MudTextField @bind-Value="_dayOnline" Label="Discord / online link" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
@@ -152,6 +154,10 @@ else
         </Authorized>
     </AuthorizeView>
 
+    @if (_focusMissing)
+    {
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">@FocusMissingText</MudAlert>
+    }
     @if (!string.IsNullOrEmpty(_error))
     {
         <MudAlert Severity="Severity.Error">@_error</MudAlert>
@@ -166,7 +172,8 @@ else
         {
             if (row.Day is GameDayDto day)
             {
-                <MudPaper Class="pa-3 mb-2" Outlined="true" Style="@(day.IsCancelled ? "opacity:.75" : day.IsPublished ? null : "border-style:dashed")">
+                <div id="@ScheduleLinks.DayElement(day.Id)" class="@DayFocusClass(day.Id)">
+                <MudPaper Class="pa-3" Outlined="true" Style="@(day.IsCancelled ? "opacity:.75" : day.IsPublished ? null : "border-style:dashed")">
                     <MudStack Row="true" AlignItems="AlignItems.Start" Class="flex-wrap">
                         <MudStack Spacing="0" Style="min-width:10rem">
                             <MudText Typo="Typo.subtitle1"><strong>@ClubTime.FormatDate(day.ScheduledAt)</strong></MudText>
@@ -179,7 +186,7 @@ else
                         </MudStack>
                         <MudStack Spacing="1" Style="flex:1; min-width:14rem">
                             <MudText Typo="Typo.h6">@(string.IsNullOrWhiteSpace(day.Title) ? "Game day" : day.Title)</MudText>
-                            <MudText Typo="Typo.caption">@day.Venue @(!string.IsNullOrWhiteSpace(day.Address) ? " · " + day.Address : "")</MudText>
+                            <MudText Typo="Typo.caption"><PlaceLine VenueId="day.VenueId" Venue="day.Venue" Address="day.Address" /></MudText>
                             @if (!string.IsNullOrWhiteSpace(day.OnlineLink))
                             {
                                 <MudLink Href="@day.OnlineLink" Target="_blank">Online / Discord</MudLink>
@@ -219,7 +226,7 @@ else
                     </MudStack>
                     @foreach (var game in day.Games)
                     {
-                        <ScheduleGameCard Event="game" Busy="_busy" Nested="true" DayStart="day.ScheduledAt" DayEnd="day.EndsAt"
+                        <ScheduleGameCard Event="game" Busy="_busy" Nested="true" Focused="@(FocusGameId == game.Id)" DayStart="day.ScheduledAt" DayEnd="day.EndsAt"
                                           Expanded="_expanded.Contains(game.Id)" Roster="RosterFor(game.Id)"
                                           OnToggleRoster="ToggleRosterAsync" OnPublish="PublishFromCard" OnEdit="EditAsync"
                                           OnReschedule="RescheduleAsync" OnCancel="CancelAsync" OnDetach="DetachAsync"
@@ -227,10 +234,11 @@ else
                                           OnChanged="ReloadAsync" />
                     }
                 </MudPaper>
+                </div>
             }
             else if (row.Game is CalendarEventDto ev)
             {
-                <ScheduleGameCard Event="ev" Busy="_busy" Expanded="_expanded.Contains(ev.Id)" Roster="RosterFor(ev.Id)"
+                <ScheduleGameCard Event="ev" Busy="_busy" Focused="@(FocusGameId == ev.Id)" Expanded="_expanded.Contains(ev.Id)" Roster="RosterFor(ev.Id)"
                                   OnToggleRoster="ToggleRosterAsync" OnPublish="PublishFromCard" OnEdit="EditAsync"
                                   OnReschedule="RescheduleAsync" OnCancel="CancelAsync" OnDetach="DetachAsync"
                                   OnSelfCheckIn="SelfCheckInAsync" OnRsvp="RsvpFromCard" OnManagerCheckIn="ManagerFromCard"
@@ -259,9 +267,35 @@ else
     private Task<AuthenticationState>? AuthenticationState { get; set; }
     private string _window = "upcoming";
     private CalFilter _filter = CalFilter.Upcoming;
+    private string? _loadedKey;
+    private bool _scrolled;
+    private bool _focusMissing;
+
+    [SupplyParameterFromQuery(Name = "game")]
+    public string? FocusGame { get; set; }
+
+    [SupplyParameterFromQuery(Name = "day")]
+    public string? FocusDay { get; set; }
+
+    [SupplyParameterFromQuery(Name = "month")]
+    public string? FocusMonth { get; set; }
+
+    private Guid? FocusGameId => Guid.TryParse(FocusGame, out var id) ? id : null;
+    private Guid? FocusDayId => Guid.TryParse(FocusDay, out var id) ? id : null;
+
+    private string? FocusElementId =>
+        FocusGameId is Guid game ? ScheduleLinks.GameElement(game) :
+        FocusDayId is Guid day ? ScheduleLinks.DayElement(day) : null;
+
+    private string FocusMissingText =>
+        FocusGameId is not null ? "That game is not on this schedule." : "That game day is not on this schedule.";
+
+    private string DayFocusClass(Guid id) =>
+        FocusDayId == id && FocusGameId is null ? "schedule-focus mb-2" : "mb-2";
     private List<CalendarEventDto> _events = [];
     private List<GameDayDto> _days = [];
     private List<RuleSetDto> _ruleSets = [];
+    private List<VenueDto> _venues = [];
     private readonly Dictionary<Guid, IReadOnlyList<RosterRowDto>> _rosters = [];
     private readonly HashSet<Guid> _expanded = [];
     private List<(string Key, string Label)> _months = [];
@@ -273,6 +307,7 @@ else
     private string _title = "";
     private string _host = "";
     private string _venue = "";
+    private Guid? _venueId;
     private string _address = "";
     private string _online = "";
     private string _notes = "";
@@ -288,6 +323,7 @@ else
     private int _dayWeeks = 1;
     private string _dayTitle = "";
     private string _dayVenue = "";
+    private Guid? _dayVenueId;
     private string _dayAddress = "";
     private string _dayOnline = "";
     private string _dayNotes = "";
@@ -337,7 +373,53 @@ else
         {
             _ruleSets = [];
         }
+
+        try
+        {
+            _venues = (await Club.GetVenuesAsync()).ToList();
+        }
+        catch (ClubApiException)
+        {
+            _venues = [];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{FocusMonth}|{FocusGame}|{FocusDay}";
+        if (key == _loadedKey)
+            return;
+        _loadedKey = key;
+        if (FocusGameId is not null || FocusDayId is not null)
+            _filter = CalFilter.Upcoming;
+        ApplyFocusMonth();
+        _scrolled = false;
         await ReloadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_scrolled || _loading || _focusMissing || FocusElementId is null)
+            return;
+        if (await Js.InvokeAsync<bool>("obwcScroll.toId", FocusElementId))
+            _scrolled = true;
+    }
+
+    private void ApplyFocusMonth()
+    {
+        if (!ScheduleLinks.TryParseMonth(FocusMonth, out var year, out var month))
+            return;
+        var key = $"{year:0000}-{month:00}";
+        _window = key;
+        if (_months.Exists(item => item.Key == key))
+            return;
+        var label = new DateTime(year, month, 1).ToString("MMMM yyyy");
+        var index = _months.FindIndex(item => string.Compare(item.Key, key, StringComparison.Ordinal) > 0);
+        var entry = (key, label);
+        if (index < 0)
+            _months.Add(entry);
+        else
+            _months.Insert(index, entry);
     }
 
     private bool Matches(CalendarEventDto ev) => _filter switch
@@ -396,8 +478,27 @@ else
         }
         finally
         {
+            NoteFocus();
             _loading = false;
         }
+    }
+
+    private bool GameIsShown(Guid id) =>
+        _events.Any(item => item.Id == id && item.GameDayId is null && Matches(item))
+        || _days.Any(day => MatchesDay(day) && day.Games.Any(game => game.Id == id));
+
+    private void NoteFocus()
+    {
+        _focusMissing = false;
+        if (_error is not null || (FocusGameId is null && FocusDayId is null))
+            return;
+        if (ScheduleLinks.TryParseMonth(FocusMonth, out var year, out var month)
+            && !string.Equals(_window, $"{year:0000}-{month:00}", StringComparison.Ordinal))
+            return;
+        if (FocusGameId is Guid game)
+            _focusMissing = !GameIsShown(game);
+        else if (FocusDayId is Guid day)
+            _focusMissing = !_days.Any(item => item.Id == day && MatchesDay(item));
     }
 
     private async Task CreateAsync()
@@ -433,6 +534,7 @@ else
                 Title = _title.Trim(),
                 ScheduledAt = start,
                 EndsAt = end,
+                VenueId = _venueId,
                 Venue = Blank(_venue),
                 Address = Blank(_address),
                 OnlineLink = Blank(_online),
@@ -534,6 +636,8 @@ else
             [nameof(EditEventDialog.Title)] = ev.Title,
             [nameof(EditEventDialog.Notes)] = ev.Notes,
             [nameof(EditEventDialog.Venue)] = ev.Venue,
+            [nameof(EditEventDialog.VenueId)] = ev.VenueId,
+            [nameof(EditEventDialog.Venues)] = _venues,
             [nameof(EditEventDialog.Address)] = ev.Address,
             [nameof(EditEventDialog.OnlineLink)] = ev.OnlineLink,
             [nameof(EditEventDialog.LocationNotes)] = ev.LocationNotes,
@@ -554,6 +658,7 @@ else
             {
                 Title = edited.Title,
                 Notes = edited.Notes,
+                VenueId = edited.VenueId,
                 Venue = edited.Venue,
                 Address = edited.Address,
                 OnlineLink = edited.OnlineLink,
@@ -635,6 +740,23 @@ else
         }
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
+
+    private async Task OnGameVenueListed(VenueDto? venue)
+    {
+        if (venue is not null)
+            _address = venue.Address ?? "";
+        await SyncGamePlace();
+    }
+
+    private async Task OnDayVenueListed(VenueDto? venue)
+    {
+        if (venue is not null)
+            _dayAddress = venue.Address ?? "";
+        await SyncDayPlace();
+    }
+
+    private static string? ListedAddressHelp(Guid? venueId) =>
+        venueId is null ? null : "Address comes from the venues list.";
 
     private async Task SyncGamePlace()
     {
@@ -768,6 +890,7 @@ else
                 Title = _dayTitle.Trim(),
                 ScheduledAt = start,
                 EndsAt = end,
+                VenueId = _dayVenueId,
                 Venue = Blank(_dayVenue),
                 Address = Blank(_dayAddress),
                 OnlineLink = Blank(_dayOnline),
@@ -835,6 +958,8 @@ else
             [nameof(EditGameDayDialog.Title)] = day.Title,
             [nameof(EditGameDayDialog.Notes)] = day.Notes,
             [nameof(EditGameDayDialog.Venue)] = day.Venue,
+            [nameof(EditGameDayDialog.VenueId)] = day.VenueId,
+            [nameof(EditGameDayDialog.Venues)] = _venues,
             [nameof(EditGameDayDialog.Address)] = day.Address,
             [nameof(EditGameDayDialog.OnlineLink)] = day.OnlineLink,
             [nameof(EditGameDayDialog.LocationNotes)] = day.LocationNotes
@@ -850,6 +975,7 @@ else
             {
                 Title = edited.Title,
                 Notes = edited.Notes,
+                VenueId = edited.VenueId,
                 Venue = edited.Venue,
                 Address = edited.Address,
                 OnlineLink = edited.OnlineLink,

@@ -38,6 +38,9 @@ public class PlaySession : IOwnedResource
     public string? Notes { get; set; }
     public string? Venue { get; set; }
     public string? Address { get; set; }
+    /// <summary>Set when the place is a club venue. The name and address are copied so they remain if that venue is removed.</summary>
+    public Guid? VenueId { get; set; }
+    public Venue? ListedVenue { get; set; }
     public string? OnlineLink { get; set; }
     public string? LocationNotes { get; set; }
     public int? PlayerCap { get; set; }
@@ -78,6 +81,9 @@ public class GameDay : IOwnedResource
     public string? Notes { get; set; }
     public string? Venue { get; set; }
     public string? Address { get; set; }
+    /// <summary>Set when the place is a club venue. The name and address are copied so they remain if that venue is removed.</summary>
+    public Guid? VenueId { get; set; }
+    public Venue? ListedVenue { get; set; }
     public string? OnlineLink { get; set; }
     public string? LocationNotes { get; set; }
     public string CreatedByUserId { get; set; } = "";
@@ -230,6 +236,8 @@ public class ContentPage
     public string Key { get; set; } = "";
     public string Title { get; set; } = "";
     public string Body { get; set; } = "";
+    public string? PhotoPath { get; set; }
+    public string? PhotoContentType { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
 }
 

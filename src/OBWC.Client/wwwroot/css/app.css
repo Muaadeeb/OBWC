@@ -210,8 +210,22 @@ h1, h2, h3, .mud-typography-h4, .mud-typography-h5, .mud-typography-h6 {
     border-style: dashed;
 }
 
+.mud-cal-cell-template {
+    cursor: pointer;
+}
+
 .mud-cal-cell-template .cal-chip {
     max-width: 100%;
+}
+
+.schedule-focus {
+    scroll-margin-top: 5.5rem;
+    outline: 2px solid #C9B873;
+    outline-offset: 2px;
+}
+
+.venue-anchor {
+    scroll-margin-top: 5.5rem;
 }
 
 .cal-item-cancelled {

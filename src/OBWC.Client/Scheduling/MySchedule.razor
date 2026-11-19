@@ -4,11 +4,7 @@
 @inject ISnackbar Snackbar
 
 <PageTitle>My schedule · OBWC</PageTitle>
-<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2 flex-wrap">
-    <h1 class="mud-typography mud-typography-h4 mb-0">My schedule</h1>
-    <MudSpacer />
-    <MudButton Variant="Variant.Text" Href="/schedule" StartIcon="@Icons.Material.Filled.CalendarMonth">Full calendar</MudButton>
-</MudStack>
+<h1>My schedule</h1>
 <p class="lede">Your Going, Waitlist, and Maybe games. Times are Central Time (CT).</p>
 
 @if (_loading)
@@ -21,7 +17,7 @@ else if (!string.IsNullOrEmpty(_error))
 }
 else if (_items.Count == 0)
 {
-    <MudAlert Severity="Severity.Info">Nothing on your schedule yet. Open the <MudLink Href="/schedule">calendar</MudLink> and RSVP Going or Maybe.</MudAlert>
+    <MudAlert Severity="Severity.Info">Nothing on your schedule yet. Open the <MudLink Href="/schedule">game schedule</MudLink> and RSVP Going or Maybe.</MudAlert>
 }
 else
 {
@@ -34,16 +30,16 @@ else
         <MudPaper Class="pa-3 mb-2" Outlined="true">
             <MudStack Row="true" Class="flex-wrap" AlignItems="AlignItems.Start">
                 <MudStack Spacing="0" Style="min-width:9rem">
-                    <MudText Typo="Typo.subtitle1"><strong>@ClubTime.FormatDate(ev.ScheduledAt)</strong></MudText>
+                    <MudLink Href="@ScheduleLinks.Game(ev.Id, ev.ScheduledAt)" Typo="Typo.subtitle1"><strong>@ClubTime.FormatDate(ev.ScheduledAt)</strong></MudLink>
                     <MudText Typo="Typo.caption">@ClubTime.FormatTimeRange(ev.ScheduledAt, ev.EndsAt)</MudText>
                 </MudStack>
                 <MudStack Spacing="1" Style="flex:1" AlignItems="AlignItems.Start">
-                    <MudText Typo="Typo.subtitle1">@(string.IsNullOrWhiteSpace(ev.Title) ? "Club game" : ev.Title)</MudText>
+                    <MudLink Href="@ScheduleLinks.Game(ev.Id, ev.ScheduledAt)" Typo="Typo.subtitle1">@(string.IsNullOrWhiteSpace(ev.Title) ? "Club game" : ev.Title)</MudLink>
                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="fit-chip">@(ev.GameDayId is null ? "Game" : "Game on a game day")</MudChip>
                     @if (ev.IsCancelled) { <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="fit-chip">Cancelled</MudChip> }
                     @if (!string.IsNullOrWhiteSpace(ev.Venue) || !string.IsNullOrWhiteSpace(ev.Address))
                     {
-                        <MudText Typo="Typo.caption">@ev.Venue @(!string.IsNullOrWhiteSpace(ev.Address) ? "· " + ev.Address : "")</MudText>
+                        <MudText Typo="Typo.caption"><PlaceLine VenueId="ev.VenueId" Venue="ev.Venue" Address="ev.Address" /></MudText>
                     }
                     <MudChip T="string" Size="Size.Small" Class="fit-chip" Color="@(ev.MyRsvp switch { SessionRsvpStatus.Going => Color.Success, SessionRsvpStatus.Waitlist => Color.Info, SessionRsvpStatus.Maybe => Color.Warning, _ => Color.Default })">
                         @ev.MyRsvp

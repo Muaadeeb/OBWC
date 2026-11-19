@@ -2,6 +2,7 @@
 @inject ClubApi Club
 @inject AuthApi Auth
 @inject ISnackbar Snackbar
+@inject IDialogService Dialogs
 
 <PageTitle>Games People Play and Rules They Follow · OBWC</PageTitle>
 <h1>Games People Play and Rules They Follow</h1>
@@ -74,6 +75,7 @@ else
                         <MudTextField T="string" Value="@NameFor(rule)" ValueChanged="value => _names[rule.Id] = value" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" />
                         <MudTextField T="string" Value="@PublishedFor(rule)" ValueChanged="value => _published[rule.Id] = value" Label="Names from the club list" Variant="Variant.Outlined" Margin="Margin.Dense" />
                         <MudButton Size="Size.Small" Variant="Variant.Outlined" Class="mt-2" OnClick="() => SaveRule(rule)">Save rule set</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" Class="mt-2 ml-2" OnClick="() => DeleteRule(rule)">Delete rule set</MudButton>
                     </Authorized>
                 </AuthorizeView>
             </MudExpansionPanel>
@@ -194,6 +196,27 @@ else
                 SortOrder = rule.SortOrder
             });
             Snackbar.Add("Rule set saved.", Severity.Success);
+            await Reload();
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task DeleteRule(RuleSetDto rule)
+    {
+        var confirmed = await Dialogs.ShowMessageBoxAsync(
+            "Delete rule set",
+            $"Delete {rule.Name}? Members who added themselves are removed. A rule set used by a scheduled game cannot be deleted.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+        if (confirmed != true)
+            return;
+        try
+        {
+            await Club.DeleteRuleSetAsync(rule.Id);
+            _names.Remove(rule.Id);
+            _published.Remove(rule.Id);
+            _notes.Remove(rule.Id);
+            Snackbar.Add("Rule set deleted.", Severity.Success);
             await Reload();
         }
         catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }

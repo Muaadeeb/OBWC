@@ -1,0 +1,83 @@
+@inject ClubApi Club
+@inject ApiOrigin Origin
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PhotoSlot Src="@Origin.Absolute(_page?.PhotoUrl)" Label="@EmptyLabel" Alt="@Alt" />
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <div class="mt-2">
+            <label>Page photo <InputFile @key="_generation" OnChange="e => _file = e.File" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Class="mt-2" Disabled="_busy" OnClick="Upload">Upload photo</MudButton>
+            @if (!string.IsNullOrWhiteSpace(_page?.PhotoUrl))
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" Class="mt-2 ml-2" Disabled="_busy" OnClick="Remove">Remove photo</MudButton>
+            }
+        </div>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    [Parameter, EditorRequired] public string ContentKey { get; set; } = "";
+    [Parameter, EditorRequired] public string EmptyLabel { get; set; } = "";
+    [Parameter] public string Alt { get; set; } = "";
+
+    private ContentPageDto? _page;
+    private IBrowserFile? _file;
+    private int _generation;
+    private bool _busy;
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ContentKey) || ContentKey == _loadedKey)
+            return;
+        _loadedKey = ContentKey;
+        try { _page = await Club.GetContentAsync(ContentKey); }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Warning); }
+    }
+
+    private async Task Upload()
+    {
+        if (_file is null)
+        {
+            Snackbar.Add("Choose a photo first.", Severity.Warning);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await using var stream = _file.OpenReadStream(10 * 1024 * 1024);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            _page = await Club.UploadContentPhotoAsync(ContentKey, buffer.ToArray(), _file.Name);
+            _file = null;
+            _generation++;
+            Snackbar.Add("Photo saved.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Remove()
+    {
+        var confirmed = await Dialogs.ShowMessageBoxAsync(
+            "Remove photo",
+            "Remove this photo from the page?",
+            yesText: "Remove",
+            cancelText: "Cancel");
+        if (confirmed != true)
+            return;
+
+        _busy = true;
+        try
+        {
+            await Club.DeleteContentPhotoAsync(ContentKey);
+            _page = await Club.GetContentAsync(ContentKey);
+            Snackbar.Add("Photo removed.", Severity.Success);
+        }
+        catch (ClubApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+}

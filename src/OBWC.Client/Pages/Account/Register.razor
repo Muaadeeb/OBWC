@@ -17,6 +17,9 @@
     </MudSelect>
     @if (!string.IsNullOrEmpty(_message)) { <MudAlert Severity="@(_error ? Severity.Error : Severity.Success)" Class="mt-3">@_message</MudAlert> }
     <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || _registered)" OnClick="Submit">Register</MudButton>
+    <div class="mt-3">
+        <MudLink Href="/account/login">Sign in</MudLink>
+    </div>
 </MudPaper>
 
 @code {

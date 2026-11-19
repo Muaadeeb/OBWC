@@ -17,7 +17,20 @@ else
         </header>
         <dl>
             <dt>Location</dt>
-            <dd>@_event.LocationDisplay</dd>
+            <dd>
+                @if (_event.VenueId is Guid)
+                {
+                    <PlaceLine VenueId="_event.VenueId" Venue="_event.Venue" Address="_event.Address" />
+                    @if (!string.IsNullOrWhiteSpace(_event.LocationNotes))
+                    {
+                        <text> (@_event.LocationNotes)</text>
+                    }
+                }
+                else
+                {
+                    @_event.LocationDisplay
+                }
+            </dd>
             <dt>Date/Time</dt>
             <dd>@ClubTime.FormatLongDate(_event.ScheduledAt) · @ClubTime.FormatTimeRange(_event.ScheduledAt, _event.EndsAt)</dd>
             <dt>Points of contact</dt>

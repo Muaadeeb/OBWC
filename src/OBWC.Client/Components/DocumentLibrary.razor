@@ -4,6 +4,18 @@
 
 <h1>@Heading</h1>
 <p class="lede">Files an admin has posted for this section. Members-only files stay off the public list.</p>
+<MudStack Row="true" Spacing="3" Class="flex-wrap mb-3">
+    <MudLink Href="/documents">Club documents</MudLink>
+    @foreach (var other in Others)
+    {
+        <MudLink Href="@DocumentLinks.Page(other)">@DocumentLinks.Label(other)</MudLink>
+    }
+    <AuthorizeView Roles="Admin,SuperAdmin">
+        <Authorized>
+            <MudLink Href="/admin/documents">Maintain these documents</MudLink>
+        </Authorized>
+    </AuthorizeView>
+</MudStack>
 @if (_loading)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -42,6 +54,9 @@ else
 @code {
     [Parameter, EditorRequired] public DocumentCategory Category { get; set; }
     [Parameter, EditorRequired] public string Heading { get; set; } = "";
+
+    private IEnumerable<DocumentCategory> Others =>
+        Enum.GetValues<DocumentCategory>().Where(category => category != Category);
 
     private List<ClubDocumentDto> _docs = [];
     private string? _error;

@@ -10,6 +10,8 @@ public class MaintenanceAuthorizationTests(ApiFactory factory) : IClassFixture<A
 {
     private readonly ApiTest _api = new(factory);
 
+    private static readonly byte[] TinyJpeg = [0xFF, 0xD8, 0xFF, 0xD9];
+
     private static readonly byte[] TinyPng =
     [
         0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
@@ -176,6 +178,34 @@ public class MaintenanceAuthorizationTests(ApiFactory factory) : IClassFixture<A
         Assert.Contains(publicVenues!, item => item.Name == "Side room" && item.Description == "Notes from the GM");
     }
 
+    [Fact]
+    public async Task Replacing_a_venue_photo_serves_the_new_image()
+    {
+        await _api.RegisterAndLoginAsync("venue-swap@obwc.test", "Venue Swap");
+        await _api.AddRolesAsync("venue-swap@obwc.test", RoleNames.Admin);
+        var admin = await LoginAsync("venue-swap@obwc.test");
+        using var client = _api.As(admin);
+
+        var created = await client.PostAsJsonAsync("/api/venues", new SaveVenueRequest { Name = "Photo room" });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var venue = (await created.Content.ReadFromJsonAsync<VenueDto>())!;
+
+        var first = await client.PostAsync($"/api/venues/{venue.Id}/photos", VenuePhoto("inside", "first.png", TinyPng, "image/png"));
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        var withFirst = (await first.Content.ReadFromJsonAsync<VenueDto>())!;
+        Assert.Contains("?v=", withFirst.InsidePhotoUrl, StringComparison.Ordinal);
+        Assert.Equal(TinyPng, await _api.Client.GetByteArrayAsync(withFirst.InsidePhotoUrl));
+
+        var second = await client.PostAsync($"/api/venues/{venue.Id}/photos", VenuePhoto("inside", "second.jpg", TinyJpeg, "image/jpeg"));
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var withSecond = (await second.Content.ReadFromJsonAsync<VenueDto>())!;
+        Assert.NotEqual(withFirst.InsidePhotoUrl, withSecond.InsidePhotoUrl);
+        Assert.Equal(TinyJpeg, await _api.Client.GetByteArrayAsync(withSecond.InsidePhotoUrl));
+
+        var listed = await _api.Client.GetFromJsonAsync<List<VenueDto>>("/api/venues");
+        Assert.Equal(withSecond.InsidePhotoUrl, listed!.Single(item => item.Id == venue.Id).InsidePhotoUrl);
+    }
+
     private async Task<AuthResponse> LoginAsync(string email)
     {
         var response = await _api.Client.PostAsJsonAsync("/api/auth/login", new LoginRequest
@@ -212,6 +242,15 @@ public class MaintenanceAuthorizationTests(ApiFactory factory) : IClassFixture<A
     {
         var content = PhotoForm(caption);
         content.Add(new StringContent(publicEvent), "publicEventName");
+        return content;
+    }
+
+    private static MultipartFormDataContent VenuePhoto(string field, string fileName, byte[] body, string contentType)
+    {
+        var content = new MultipartFormDataContent();
+        var bytes = new ByteArrayContent(body);
+        bytes.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        content.Add(bytes, field, fileName);
         return content;
     }
 

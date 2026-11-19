@@ -110,7 +110,7 @@ else if (!string.IsNullOrEmpty(_error))
                     var span = Span(day.ScheduledAt, day.EndsAt);
                     if (!Hits(span.Start, span.End, start, end))
                         continue;
-                    items.Add(Item("Game day", string.IsNullOrWhiteSpace(day.Title) ? "Game day" : day.Title.Trim(), Color.Secondary, "/schedule", span, false, day.LocationDisplay, day.IsCancelled, !day.IsPublished, ClubTime.FormatTimeRange(day.ScheduledAt, day.EndsAt)));
+                    items.Add(Item("Game day", string.IsNullOrWhiteSpace(day.Title) ? "Game day" : day.Title.Trim(), Color.Secondary, ScheduleLinks.Day(day.Id, day.ScheduledAt), span, false, day.LocationDisplay, day.IsCancelled, !day.IsPublished, ClubTime.FormatTimeRange(day.ScheduledAt, day.EndsAt)));
                 }
             }
 
@@ -127,7 +127,7 @@ else if (!string.IsNullOrEmpty(_error))
                     var when = ClubTime.FormatTimeRange(game.ScheduledAt, game.EndsAt);
                     if (!string.IsNullOrWhiteSpace(game.HostName))
                         when += $" · Host: {game.HostName.Trim()}";
-                    items.Add(Item("Game", string.IsNullOrWhiteSpace(game.Title) ? "Club game" : game.Title.Trim(), Color.Primary, "/schedule", span, false, game.LocationDisplay, game.IsCancelled, !game.IsPublished, when));
+                    items.Add(Item("Game", string.IsNullOrWhiteSpace(game.Title) ? "Club game" : game.Title.Trim(), Color.Primary, ScheduleLinks.Game(game.Id, game.ScheduledAt), span, false, game.LocationDisplay, game.IsCancelled, !game.IsPublished, when));
                 }
             }
 
@@ -167,7 +167,7 @@ else if (!string.IsNullOrEmpty(_error))
             return;
 
         var place = string.IsNullOrWhiteSpace(ev.LocationText) ? null : ev.LocationText.Trim();
-        items.Add(Item("Event", ev.Name.Trim(), Color.Info, "/conventions", (start, end), true, place, false, false, place));
+        items.Add(Item("Event", ev.Name.Trim(), Color.Info, ScheduleLinks.Convention(ev.Id), (start, end), true, place, false, false, place));
     }
 
     private static ClubCalItem Item(

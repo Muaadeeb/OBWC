@@ -319,6 +319,14 @@ namespace OBWC.Api.Data.SqlServerMigrations
                         .HasMaxLength(20000)
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("PhotoContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PhotoPath")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -519,6 +527,9 @@ namespace OBWC.Api.Data.SqlServerMigrations
                         .HasMaxLength(160)
                         .HasColumnType("nvarchar(160)");
 
+                    b.Property<Guid?>("VenueId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedByUserId");
@@ -526,6 +537,8 @@ namespace OBWC.Api.Data.SqlServerMigrations
                     b.HasIndex("ScheduledAt");
 
                     b.HasIndex("SeriesKey");
+
+                    b.HasIndex("VenueId");
 
                     b.ToTable("GameDays", (string)null);
                 });
@@ -738,6 +751,9 @@ namespace OBWC.Api.Data.SqlServerMigrations
                         .HasMaxLength(160)
                         .HasColumnType("nvarchar(160)");
 
+                    b.Property<Guid?>("VenueId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedByUserId");
@@ -749,6 +765,8 @@ namespace OBWC.Api.Data.SqlServerMigrations
                     b.HasIndex("ScheduledAt");
 
                     b.HasIndex("SeriesKey");
+
+                    b.HasIndex("VenueId");
 
                     b.ToTable("PlaySessions", (string)null);
                 });
@@ -1108,7 +1126,14 @@ namespace OBWC.Api.Data.SqlServerMigrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("OBWC.Api.Data.Entities.Venue", "ListedVenue")
+                        .WithMany()
+                        .HasForeignKey("VenueId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("CreatedBy");
+
+                    b.Navigation("ListedVenue");
                 });
 
             modelBuilder.Entity("OBWC.Api.Data.Entities.PlaySession", b =>
@@ -1129,9 +1154,16 @@ namespace OBWC.Api.Data.SqlServerMigrations
                         .HasForeignKey("RuleSetId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("OBWC.Api.Data.Entities.Venue", "ListedVenue")
+                        .WithMany()
+                        .HasForeignKey("VenueId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("CreatedBy");
 
                     b.Navigation("GameDay");
+
+                    b.Navigation("ListedVenue");
 
                     b.Navigation("RuleSet");
                 });

@@ -25,7 +25,7 @@ else
         {
             <MudExpansionPanel Text="@store.Name">
                 @if (!string.IsNullOrWhiteSpace(store.FormerName)) { <p>formerly @store.FormerName</p> }
-                @if (!string.IsNullOrWhiteSpace(store.Address)) { <p>@store.Address</p> }
+                @if (!string.IsNullOrWhiteSpace(store.Address)) { <p><MudLink Href="@ContactLinks.ForAddress(store.Address)" Target="_blank">@store.Address</MudLink></p> }
                 @if (!string.IsNullOrWhiteSpace(store.Description)) { <p>@store.Description</p> }
                 <ul>
                     @if (!string.IsNullOrWhiteSpace(store.Bullet1)) { <li>@store.Bullet1</li> }

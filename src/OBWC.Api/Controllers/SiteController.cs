@@ -30,9 +30,10 @@ public class SiteController(ApplicationDbContext db, IClubMailer mail, IHostEnvi
     [AllowAnonymous]
     public async Task<ActionResult<ContentPageDto>> GetContent(string key, CancellationToken cancellationToken)
     {
-        if (!ContentKeys.IsKnown(key))
+        var canonical = ContentKeys.Canonical(key);
+        if (canonical is null)
             return NotFound();
-        var page = await db.ContentPages.AsNoTracking().SingleOrDefaultAsync(item => item.Key == key, cancellationToken);
+        var page = await db.ContentPages.AsNoTracking().SingleOrDefaultAsync(item => item.Key == canonical, cancellationToken);
         return page is null ? NotFound() : Ok(MapPage(page));
     }
 
@@ -40,12 +41,13 @@ public class SiteController(ApplicationDbContext db, IClubMailer mail, IHostEnvi
     [Authorize(Policy = PolicyNames.Admin)]
     public async Task<ActionResult<ContentPageDto>> UpdateContent(string key, SaveContentRequest request, CancellationToken cancellationToken)
     {
-        if (!ContentKeys.IsKnown(key))
+        var canonical = ContentKeys.Canonical(key);
+        if (canonical is null)
             return NotFound();
-        var page = await db.ContentPages.SingleOrDefaultAsync(item => item.Key == key, cancellationToken);
+        var page = await db.ContentPages.SingleOrDefaultAsync(item => item.Key == canonical, cancellationToken);
         if (page is null)
         {
-            page = new ContentPage { Key = key };
+            page = new ContentPage { Key = canonical };
             db.ContentPages.Add(page);
         }
 
@@ -54,6 +56,62 @@ public class SiteController(ApplicationDbContext db, IClubMailer mail, IHostEnvi
         page.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         return Ok(MapPage(page));
+    }
+
+    [HttpPost("api/content/{key}/photo")]
+    [Authorize(Policy = PolicyNames.Admin)]
+    [RequestSizeLimit(12 * 1024 * 1024)]
+    public async Task<ActionResult<ContentPageDto>> UploadContentPhoto(string key, IFormFile file, CancellationToken cancellationToken)
+    {
+        if (!ContentKeys.HasPhoto(key))
+            return NotFound();
+        var canonical = ContentKeys.Canonical(key)!;
+        var page = await db.ContentPages.SingleOrDefaultAsync(item => item.Key == canonical, cancellationToken);
+        if (page is null)
+        {
+            page = new ContentPage
+            {
+                Key = canonical,
+                Title = canonical == ContentKeys.Home ? "Home" : "About Us",
+                Body = ""
+            };
+            db.ContentPages.Add(page);
+        }
+
+        try
+        {
+            var stored = await files.SaveAsync(file, "content", FileStorage.ImageExtensions, cancellationToken);
+            files.Delete(page.PhotoPath);
+            page.PhotoPath = stored.RelativePath;
+            page.PhotoContentType = stored.ContentType;
+            page.UpdatedAtUtc = DateTime.UtcNow;
+        }
+        catch (InvalidUploadException ex)
+        {
+            return Bad(ex.Message);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(MapPage(page));
+    }
+
+    [HttpDelete("api/content/{key}/photo")]
+    [Authorize(Policy = PolicyNames.Admin)]
+    public async Task<IActionResult> DeleteContentPhoto(string key, CancellationToken cancellationToken)
+    {
+        if (!ContentKeys.HasPhoto(key))
+            return NotFound();
+        var canonical = ContentKeys.Canonical(key)!;
+        var page = await db.ContentPages.SingleOrDefaultAsync(item => item.Key == canonical, cancellationToken);
+        if (page?.PhotoPath is null)
+            return NotFound();
+        var path = page.PhotoPath;
+        page.PhotoPath = null;
+        page.PhotoContentType = null;
+        page.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        files.Delete(path);
+        return NoContent();
     }
 
     [HttpGet("api/officers")]
@@ -202,8 +260,17 @@ public class SiteController(ApplicationDbContext db, IClubMailer mail, IHostEnvi
         Key = page.Key,
         Title = page.Title,
         Body = page.Body,
+        PhotoUrl = PhotoAddress(page),
         UpdatedAtUtc = page.UpdatedAtUtc
     };
+
+    private static string? PhotoAddress(ContentPage page)
+    {
+        if (string.IsNullOrWhiteSpace(page.PhotoPath))
+            return null;
+        var version = Path.GetFileNameWithoutExtension(page.PhotoPath);
+        return $"api/files/content/{page.Key}?v={version}";
+    }
 
     private static void Apply(Officer officer, SaveOfficerRequest request)
     {

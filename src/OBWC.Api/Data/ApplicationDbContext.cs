@@ -73,6 +73,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(session => session.GameDayId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(session => session.GameDayId);
+            entity.HasOne(session => session.ListedVenue)
+                .WithMany()
+                .HasForeignKey(session => session.VenueId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(session => session.VenueId);
             entity.HasMany(session => session.Attendances)
                 .WithOne(row => row.PlaySession!)
                 .HasForeignKey(row => row.PlaySessionId)
@@ -103,6 +108,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(day => day.CreatedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(day => day.ListedVenue)
+                .WithMany()
+                .HasForeignKey(day => day.VenueId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(day => day.VenueId);
         });
 
         builder.Entity<SessionAttendance>(entity =>
@@ -231,6 +241,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(page => page.Key).HasMaxLength(50);
             entity.Property(page => page.Title).HasMaxLength(200).IsRequired();
             entity.Property(page => page.Body).HasMaxLength(20000).IsRequired();
+            entity.Property(page => page.PhotoPath).HasMaxLength(400);
+            entity.Property(page => page.PhotoContentType).HasMaxLength(100);
         });
 
         builder.Entity<SiteSetting>(entity =>

@@ -257,6 +257,136 @@ public class GameDayTests(ApiFactory factory) : IClassFixture<ApiFactory>, IDisp
         Assert.Equal("Front Hall", next.Venue);
     }
 
+    [Fact]
+    public async Task Scheduled_game_links_a_listed_venue_and_keeps_the_name_after_delete()
+    {
+        var email = Email("venue-link");
+        await _api.RegisterAndLoginAsync(email, "Venue Link");
+        await _api.AddRolesAsync(email, RoleNames.Gm);
+        using var client = _api.As(await LoginAsync(email));
+
+        var createdVenue = await client.PostAsJsonAsync("/api/venues", new SaveVenueRequest
+        {
+            Name = "Link Hall",
+            Address = "9 Pier Ave"
+        });
+        Assert.Equal(HttpStatusCode.Created, createdVenue.StatusCode);
+        var venue = (await createdVenue.Content.ReadFromJsonAsync<VenueDto>())!;
+        var longName = new string('A', 180);
+        var longVenueResponse = await client.PostAsJsonAsync("/api/venues", new SaveVenueRequest
+        {
+            Name = longName,
+            Address = "1 Long Rd"
+        });
+        var longVenue = (await longVenueResponse.Content.ReadFromJsonAsync<VenueDto>())!;
+
+        var scheduled = await client.PostAsJsonAsync("/api/events", new CreateSessionRequest
+        {
+            Title = "Linked game",
+            ScheduledAt = Start.AddDays(20),
+            EndsAt = Start.AddDays(20).AddHours(3),
+            VenueId = venue.Id,
+            IsPublished = true
+        });
+        Assert.Equal(HttpStatusCode.Created, scheduled.StatusCode);
+        var gameId = (await scheduled.Content.ReadFromJsonAsync<CreateSeriesResultDto>())!.FirstSessionId!.Value;
+        var game = await client.GetFromJsonAsync<CalendarEventDto>($"/api/events/{gameId}");
+        Assert.Equal(venue.Id, game!.VenueId);
+        Assert.Equal("Link Hall", game.Venue);
+        Assert.Equal("9 Pier Ave", game.Address);
+
+        var byName = await client.PostAsJsonAsync("/api/events", new CreateSessionRequest
+        {
+            Title = "Named link",
+            ScheduledAt = Start.AddDays(21),
+            EndsAt = Start.AddDays(21).AddHours(2),
+            Venue = "link hall",
+            Address = "typed address should be replaced",
+            IsPublished = true
+        });
+        Assert.Equal(HttpStatusCode.Created, byName.StatusCode);
+        var namedId = (await byName.Content.ReadFromJsonAsync<CreateSeriesResultDto>())!.FirstSessionId!.Value;
+        var named = await client.GetFromJsonAsync<CalendarEventDto>($"/api/events/{namedId}");
+        Assert.Equal(venue.Id, named!.VenueId);
+        Assert.Equal("9 Pier Ave", named.Address);
+
+        var typed = await client.PostAsJsonAsync("/api/events", new CreateSessionRequest
+        {
+            Title = "Typed place",
+            ScheduledAt = Start.AddDays(22),
+            EndsAt = Start.AddDays(22).AddHours(2),
+            Venue = "Somebody's garage",
+            Address = "12 Side St",
+            IsPublished = true
+        });
+        Assert.Equal(HttpStatusCode.Created, typed.StatusCode);
+        var typedId = (await typed.Content.ReadFromJsonAsync<CreateSeriesResultDto>())!.FirstSessionId!.Value;
+        var free = await client.GetFromJsonAsync<CalendarEventDto>($"/api/events/{typedId}");
+        Assert.Null(free!.VenueId);
+        Assert.Equal("Somebody's garage", free.Venue);
+        Assert.Equal("12 Side St", free.Address);
+
+        var missing = await client.PostAsJsonAsync("/api/events", new CreateSessionRequest
+        {
+            Title = "Missing venue",
+            ScheduledAt = Start.AddDays(23),
+            VenueId = Guid.NewGuid(),
+            IsPublished = true
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        Assert.Contains("not on the club list", await missing.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+
+        var longGame = await client.PostAsJsonAsync("/api/events", new CreateSessionRequest
+        {
+            Title = "Long venue name",
+            ScheduledAt = Start.AddDays(24),
+            EndsAt = Start.AddDays(24).AddHours(2),
+            VenueId = longVenue.Id,
+            IsPublished = true
+        });
+        Assert.Equal(HttpStatusCode.Created, longGame.StatusCode);
+        var longGameId = (await longGame.Content.ReadFromJsonAsync<CreateSeriesResultDto>())!.FirstSessionId!.Value;
+        var longCard = await client.GetFromJsonAsync<CalendarEventDto>($"/api/events/{longGameId}");
+        Assert.Equal(longName, longCard!.Venue);
+
+        var dayResponse = await client.PostAsJsonAsync("/api/game-days", new CreateGameDayRequest
+        {
+            Title = "Linked day",
+            ScheduledAt = Start.AddDays(25),
+            EndsAt = Start.AddDays(25).AddHours(4),
+            VenueId = venue.Id,
+            IsPublished = true
+        });
+        Assert.Equal(HttpStatusCode.Created, dayResponse.StatusCode);
+        var dayId = (await dayResponse.Content.ReadFromJsonAsync<CreateSeriesResultDto>())!.FirstSessionId!.Value;
+        var day = await client.GetFromJsonAsync<GameDayDto>($"/api/game-days/{dayId}");
+        Assert.Equal(venue.Id, day!.VenueId);
+        Assert.Equal("Link Hall", day.Venue);
+        Assert.Equal("9 Pier Ave", day.Address);
+        var onDay = await CreateGameAsync(client, dayId, Start.AddDays(25), Start.AddDays(25).AddHours(4), "On the hall", follow: true);
+        var table = await client.GetFromJsonAsync<CalendarEventDto>($"/api/events/{onDay}");
+        Assert.Equal(venue.Id, table!.VenueId);
+        Assert.Equal("Link Hall", table.Venue);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/venues/{venue.Id}")).StatusCode);
+        var after = await client.GetFromJsonAsync<CalendarEventDto>($"/api/events/{gameId}");
+        Assert.Null(after!.VenueId);
+        Assert.Equal("Link Hall", after.Venue);
+        Assert.Equal("9 Pier Ave", after.Address);
+        var dayAfter = await client.GetFromJsonAsync<GameDayDto>($"/api/game-days/{dayId}");
+        Assert.Null(dayAfter!.VenueId);
+        Assert.Equal("Link Hall", dayAfter.Venue);
+        var tableAfter = await client.GetFromJsonAsync<CalendarEventDto>($"/api/events/{onDay}");
+        Assert.Null(tableAfter!.VenueId);
+        Assert.Equal("Link Hall", tableAfter.Venue);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/venues/{longVenue.Id}")).StatusCode);
+        var longAfter = await client.GetFromJsonAsync<CalendarEventDto>($"/api/events/{longGameId}");
+        Assert.Null(longAfter!.VenueId);
+        Assert.Equal(longName[..160], longAfter.Venue);
+        Assert.Equal("1 Long Rd", longAfter.Address);
+    }
+
     private static string Email(string name) => $"{name}@obwc.test";
 
     private static string Rsvp(Guid id) => $"/api/events/{id}/rsvp";

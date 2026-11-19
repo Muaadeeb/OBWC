@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OBWC.Api\OBWC.Api.csproj" />
+    <ProjectReference Include="..\..\src\OBWC.Client\OBWC.Client.csproj" />
     <ProjectReference Include="..\..\src\OBWC.Shared\OBWC.Shared.csproj" />
   </ItemGroup>
 

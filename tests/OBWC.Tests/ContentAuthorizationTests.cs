@@ -10,6 +10,8 @@ public class ContentAuthorizationTests(ApiFactory factory) : IClassFixture<ApiFa
 {
     private readonly ApiTest _api = new(factory);
 
+    private static readonly byte[] TinyJpeg = [0xFF, 0xD8, 0xFF, 0xD9];
+
     private static readonly byte[] TinyPng =
     [
         0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
@@ -90,6 +92,71 @@ public class ContentAuthorizationTests(ApiFactory factory) : IClassFixture<ApiFa
         var full = await _api.Client.GetFromJsonAsync<GalleryListDto>("/api/gallery");
         Assert.Equal(2, full!.Count);
         Assert.Equal(100, GalleryLimits.MaxPhotos);
+    }
+
+    [Fact]
+    public async Task Admin_can_set_replace_and_remove_page_photos()
+    {
+        var member = await _api.RegisterAndLoginAsync("page-photo-member@obwc.test", "Page Photo Member");
+        await _api.RegisterAndLoginAsync("page-photo-admin@obwc.test", "Page Photo Admin");
+        await _api.AddRolesAsync("page-photo-admin@obwc.test", RoleNames.Admin);
+        var login = await _api.Client.PostAsJsonAsync("/api/auth/login", new LoginRequest
+        {
+            Email = "page-photo-admin@obwc.test",
+            Password = ApiTest.Password
+        });
+        var admin = (await login.Content.ReadFromJsonAsync<AuthResponse>())!;
+        using var memberClient = _api.As(member);
+        using var adminClient = _api.As(admin);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await _api.Client.GetAsync("/api/content/home")).StatusCode);
+        using (var memberPhoto = ImageUpload(TinyPng, "home.png", "image/png"))
+            Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PostAsync("/api/content/home/photo", memberPhoto)).StatusCode);
+        using (var nuke = ImageUpload(TinyPng, "nuke.png", "image/png"))
+            Assert.Equal(HttpStatusCode.NotFound, (await adminClient.PostAsync("/api/content/nuke-con/photo", nuke)).StatusCode);
+
+        using var first = ImageUpload(TinyPng, "home.png", "image/png");
+        var uploaded = await adminClient.PostAsync("/api/content/home/photo", first);
+        Assert.Equal(HttpStatusCode.OK, uploaded.StatusCode);
+        var home = (await uploaded.Content.ReadFromJsonAsync<ContentPageDto>())!;
+        Assert.Contains("?v=", home.PhotoUrl, StringComparison.Ordinal);
+        Assert.Equal(TinyPng, await _api.Client.GetByteArrayAsync(home.PhotoUrl));
+
+        using var second = ImageUpload(TinyJpeg, "home.jpg", "image/jpeg");
+        var replaced = await adminClient.PostAsync("/api/content/home/photo", second);
+        Assert.Equal(HttpStatusCode.OK, replaced.StatusCode);
+        var next = (await replaced.Content.ReadFromJsonAsync<ContentPageDto>())!;
+        Assert.NotEqual(home.PhotoUrl, next.PhotoUrl);
+        Assert.Equal(TinyJpeg, await _api.Client.GetByteArrayAsync(next.PhotoUrl));
+
+        var about = await _api.Client.GetFromJsonAsync<ContentPageDto>("/api/content/about");
+        using var aboutPhoto = ImageUpload(TinyPng, "about.png", "image/png");
+        var aboutUploaded = await adminClient.PostAsync("/api/content/about/photo", aboutPhoto);
+        Assert.Equal(HttpStatusCode.OK, aboutUploaded.StatusCode);
+        var withPhoto = (await aboutUploaded.Content.ReadFromJsonAsync<ContentPageDto>())!;
+        var saved = await adminClient.PutAsJsonAsync("/api/content/about", new SaveContentRequest
+        {
+            Title = about!.Title,
+            Body = about.Body
+        });
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        var still = (await saved.Content.ReadFromJsonAsync<ContentPageDto>())!;
+        Assert.Equal(withPhoto.PhotoUrl, still.PhotoUrl);
+        Assert.Contains("promote historical and miniature gaming", still.Body, StringComparison.Ordinal);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await adminClient.DeleteAsync("/api/content/about/photo")).StatusCode);
+        var cleared = await _api.Client.GetFromJsonAsync<ContentPageDto>("/api/content/about");
+        Assert.Null(cleared!.PhotoUrl);
+        Assert.Equal(HttpStatusCode.NotFound, (await _api.Client.GetAsync(withPhoto.PhotoUrl)).StatusCode);
+    }
+
+    private static MultipartFormDataContent ImageUpload(byte[] body, string fileName, string contentType)
+    {
+        var content = new MultipartFormDataContent();
+        var bytes = new ByteArrayContent(body);
+        bytes.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        content.Add(bytes, "file", fileName);
+        return content;
     }
 
     private static MultipartFormDataContent PdfUpload(string fileName)

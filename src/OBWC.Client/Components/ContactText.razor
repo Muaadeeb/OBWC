@@ -1,0 +1,18 @@
+@if (Url is null)
+{
+    @Text
+}
+else if (Url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+{
+    <MudLink Href="@Url" Target="_blank">@Text</MudLink>
+}
+else
+{
+    <MudLink Href="@Url">@Text</MudLink>
+}
+
+@code {
+    [Parameter] public string? Text { get; set; }
+
+    private string? Url => ContactLinks.ForContact(Text);
+}

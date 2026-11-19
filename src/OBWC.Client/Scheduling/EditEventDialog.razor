@@ -15,10 +15,11 @@
             @if (!HidePlace)
             {
                 <MudItem xs="12" md="6">
-                    <MudTextField @bind-Value="_venue" Label="Venue" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <VenueField @bind-Value="_venue" @bind-VenueId="_venueId" Venues="Venues" ListedChanged="OnVenueListed" />
                 </MudItem>
                 <MudItem xs="12" md="6">
-                    <MudTextField @bind-Value="_address" Label="Address" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudTextField @bind-Value="_address" Label="Address" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  ReadOnly="@(_venueId is not null)" HelperText="@(_venueId is null ? null : "Address comes from the venues list.")" />
                 </MudItem>
                 <MudItem xs="12" md="6">
                     <MudTextField @bind-Value="_online" Label="Discord / online link" Variant="Variant.Outlined" Margin="Margin.Dense" />
@@ -62,6 +63,8 @@
     [Parameter] public string? Title { get; set; }
     [Parameter] public string? Notes { get; set; }
     [Parameter] public string? Venue { get; set; }
+    [Parameter] public Guid? VenueId { get; set; }
+    [Parameter] public IReadOnlyList<VenueDto> Venues { get; set; } = [];
     [Parameter] public string? Address { get; set; }
     [Parameter] public string? OnlineLink { get; set; }
     [Parameter] public string? LocationNotes { get; set; }
@@ -75,6 +78,7 @@
     private string _host = "";
     private string _notes = "";
     private string _venue = "";
+    private Guid? _venueId;
     private string _address = "";
     private string _online = "";
     private string _locationNotes = "";
@@ -88,6 +92,7 @@
         _host = HostName ?? "";
         _notes = Notes ?? "";
         _venue = Venue ?? "";
+        _venueId = VenueId;
         _address = Address ?? "";
         _online = OnlineLink ?? "";
         _locationNotes = LocationNotes ?? "";
@@ -110,6 +115,7 @@
             string.IsNullOrWhiteSpace(_title) ? null : _title.Trim(),
             Blank(_host),
             string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim(),
+            HidePlace ? VenueId : _venueId,
             HidePlace ? Blank(Venue) : Blank(_venue),
             HidePlace ? Blank(Address) : Blank(_address),
             HidePlace ? Blank(OnlineLink) : Blank(_online),
@@ -122,12 +128,19 @@
         string? Title,
         string? HostName,
         string? Notes,
+        Guid? VenueId,
         string? Venue,
         string? Address,
         string? OnlineLink,
         string? LocationNotes,
         int? PlayerCap,
         string? RuleSetName);
+
+    private void OnVenueListed(VenueDto? venue)
+    {
+        if (venue is not null)
+            _address = venue.Address ?? "";
+    }
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

@@ -1,9 +1,15 @@
 @page "/conventions"
 @inject ClubApi Club
+@inject IJSRuntime Js
 
 <PageTitle>Conventions · OBWC</PageTitle>
 <h1>Conventions</h1>
 <p class="lede">Conventions our members attend. Dates are calendar dates.</p>
+<AuthorizeView Roles="Admin,SuperAdmin">
+    <Authorized>
+        <p><MudLink Href="/admin/conventions">Maintain this list</MudLink></p>
+    </Authorized>
+</AuthorizeView>
 
 @if (_loading)
 {
@@ -18,9 +24,15 @@ else if (_items.Count == 0)
     <MudAlert Severity="Severity.Info">No conventions have been entered yet.</MudAlert>
 }
 
+@if (_focusMissing)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">That convention is not on this list.</MudAlert>
+}
+
 @foreach (var item in _items)
 {
-    <MudPaper Class="pa-3 mb-2" Outlined="true">
+    <div id="@ScheduleLinks.ConventionElement(item.Id)" class="@(FocusId == item.Id ? "schedule-focus mb-2" : "mb-2")">
+    <MudPaper Class="pa-3" Outlined="true">
         <h2>@item.Name</h2>
         @if (!string.IsNullOrWhiteSpace(item.Description))
         {
@@ -39,18 +51,44 @@ else if (_items.Count == 0)
             <MudLink Href="@item.WebsiteUrl" Target="_blank">@item.WebsiteUrl</MudLink>
         }
     </MudPaper>
+    </div>
 }
 
 @code {
     private List<ConventionDto> _items = [];
     private bool _loading = true;
     private string? _error;
+    private bool _focusMissing;
+    private string? _scrolledId;
+
+    [SupplyParameterFromQuery(Name = "id")]
+    public string? FocusText { get; set; }
+
+    private Guid? FocusId => Guid.TryParse(FocusText, out var id) ? id : null;
 
     protected override async Task OnInitializedAsync()
     {
         try { _items = (await Club.GetConventionsAsync()).ToList(); }
         catch (ClubApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_loading)
+            return;
+        _focusMissing = _error is null && _items.Count > 0 && FocusId is Guid focus && _items.All(item => item.Id != focus);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_loading || _focusMissing || FocusId is not Guid focus)
+            return;
+        var key = focus.ToString("D");
+        if (key == _scrolledId)
+            return;
+        if (await Js.InvokeAsync<bool>("obwcScroll.toId", ScheduleLinks.ConventionElement(focus)))
+            _scrolledId = key;
     }
 
     private static string? DateLabel(ConventionDto item)

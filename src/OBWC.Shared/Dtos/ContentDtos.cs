@@ -43,6 +43,7 @@ public record ContentPageDto
     public string Key { get; init; } = "";
     public string Title { get; init; } = "";
     public string Body { get; init; } = "";
+    public string? PhotoUrl { get; init; }
     public DateTime UpdatedAtUtc { get; init; }
 }
 

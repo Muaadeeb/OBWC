@@ -10,6 +10,8 @@ The SQL Server history is:
 4. `CustomRuleSetName` — optional rule set name typed on a game when it is not on the club list.
 5. `GameDays` — a game day hosts games. Games may set `PlaySessions.GameDayId`. Rows that never answered (RSVP Unknown, and not checked in) are removed.
 6. `HostName` — optional name of the person running a game, when that is someone other than the member who entered it.
+7. `PagePhoto` — optional photo on the home and about content pages.
+8. `ScheduleVenue` — optional link from a game or game day to a club venue. The venue name and address are copied onto the schedule. Removing the venue clears the link and leaves that copy.
 
 `dotnet ef` follows `Database__Provider`. From the repository root, after `dotnet tool restore`:
 

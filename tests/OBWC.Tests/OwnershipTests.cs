@@ -142,6 +142,38 @@ public class OwnershipTests(ApiFactory factory) : IClassFixture<ApiFactory>, IDi
         Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
     }
 
+    [Fact]
+    public async Task Admin_can_delete_an_unused_rule_set_and_not_one_on_the_schedule()
+    {
+        await _api.RegisterAndLoginAsync("rules-delete-admin@obwc.test", "Rules Delete Admin");
+        await _api.AddRolesAsync("rules-delete-admin@obwc.test", RoleNames.Admin);
+        var admin = await LoginAsync("rules-delete-admin@obwc.test");
+        var member = await _api.RegisterAndLoginAsync("rules-delete-member@obwc.test", "Rules Delete Member");
+        using var adminClient = _api.As(admin);
+        using var memberClient = _api.As(member);
+
+        var created = await adminClient.PostAsJsonAsync("/api/rulesets", new SaveRuleSetRequest { Name = "Delete me" });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var ruleSet = (await created.Content.ReadFromJsonAsync<RuleSetDto>())!;
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.DeleteAsync($"/api/rulesets/{ruleSet.Id}")).StatusCode);
+
+        var when = DateTimeOffset.UtcNow.AddDays(9);
+        var scheduled = ApiTest.SampleEvent("Uses a rule set", when);
+        scheduled = scheduled with { RuleSetId = ruleSet.Id };
+        Assert.Equal(HttpStatusCode.Created, (await adminClient.PostAsJsonAsync("/api/events", scheduled)).StatusCode);
+        var blocked = await adminClient.DeleteAsync($"/api/rulesets/{ruleSet.Id}");
+        Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+        Assert.Contains("scheduled game", await blocked.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+
+        var spare = await adminClient.PostAsJsonAsync("/api/rulesets", new SaveRuleSetRequest { Name = "Unused rule set" });
+        var unused = (await spare.Content.ReadFromJsonAsync<RuleSetDto>())!;
+        Assert.Equal(HttpStatusCode.NoContent, (await adminClient.DeleteAsync($"/api/rulesets/{unused.Id}")).StatusCode);
+        var listed = await _api.Client.GetFromJsonAsync<List<RuleSetDto>>("/api/rulesets");
+        Assert.DoesNotContain(listed!, item => item.Id == unused.Id);
+        Assert.Contains(listed!, item => item.Id == ruleSet.Id);
+    }
+
     private async Task<AuthResponse> LoginAsync(string email)
     {
         var response = await _api.Client.PostAsJsonAsync("/api/auth/login", new LoginRequest

@@ -52,16 +52,19 @@ else
                     }
                     @if (!string.IsNullOrWhiteSpace(officer.Contact))
                     {
-                        <p>@officer.Contact</p>
+                        <p><ContactText Text="@officer.Contact" /></p>
                     }
                 </article>
             }
         </div>
     }
-    <div class="photo-slot">A club photo goes here. No photo has been added yet.</div>
+    <PagePhoto ContentKey="@ContentKeys.About" EmptyLabel="A club photo goes here. No photo has been added yet." Alt="The club" />
     <AuthorizeView Roles="Admin,SuperAdmin">
         <Authorized>
-            <MudButton Variant="Variant.Outlined" Class="mt-3" OnClick="@(() => _editing = !_editing)">@(_editing ? "Close editor" : "Edit about page")</MudButton>
+            <MudStack Row="true" Spacing="2" Class="mt-3 flex-wrap" AlignItems="AlignItems.Center">
+                <MudButton Variant="Variant.Outlined" OnClick="@(() => _editing = !_editing)">@(_editing ? "Close editor" : "Edit about page")</MudButton>
+                <MudLink Href="/admin/officers">Maintain officers</MudLink>
+            </MudStack>
             @if (_editing && _info is not null)
             {
                 <MudPaper Class="pa-3 mt-3" Outlined="true">
@@ -75,7 +78,6 @@ else
                     <MudTextField @bind-Value="_term" Label="Officer term" Variant="Variant.Outlined" Class="mt-2" />
                     <MudTextField @bind-Value="_meeting" Label="Election meeting" Variant="Variant.Outlined" Class="mt-2" />
                     <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="Save">Save</MudButton>
-                    <p class="mt-3"><MudLink Href="/admin/officers">Maintain officers</MudLink></p>
                 </MudPaper>
             }
         </Authorized>

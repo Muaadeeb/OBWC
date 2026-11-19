@@ -19,6 +19,17 @@ public sealed class ClubApi(HttpClient http)
     public Task<ContentPageDto> UpdateContentAsync(string key, SaveContentRequest request, CancellationToken cancellationToken = default) =>
         SendAsync<ContentPageDto>(HttpMethod.Put, $"api/content/{key}", request, cancellationToken);
 
+    public async Task<ContentPageDto> UploadContentPhotoAsync(string key, byte[] content, string fileName, CancellationToken cancellationToken = default)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(FileContent(content, "image/png"), "file", fileName);
+        var response = await http.PostAsync($"api/content/{key}/photo", form, cancellationToken);
+        return await ReadAsync<ContentPageDto>(response, cancellationToken);
+    }
+
+    public Task DeleteContentPhotoAsync(string key, CancellationToken cancellationToken = default) =>
+        DeleteAsync($"api/content/{key}/photo", cancellationToken);
+
     public Task<IReadOnlyList<OfficerDto>> GetOfficersAsync(CancellationToken cancellationToken = default) =>
         GetListAsync<OfficerDto>("api/officers", cancellationToken);
 

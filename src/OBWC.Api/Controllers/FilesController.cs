@@ -33,6 +33,19 @@ public class FilesController(ApplicationDbContext db, FileStorage files) : ClubA
         return File(files.Open(path), contentType ?? "application/octet-stream");
     }
 
+    [HttpGet("content/{key}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ContentPhoto(string key, CancellationToken cancellationToken)
+    {
+        var canonical = ContentKeys.Canonical(key);
+        if (canonical is null || !ContentKeys.HasPhoto(canonical))
+            return NotFound();
+        var page = await db.ContentPages.AsNoTracking().SingleOrDefaultAsync(item => item.Key == canonical, cancellationToken);
+        if (page?.PhotoPath is null)
+            return NotFound();
+        return File(files.Open(page.PhotoPath), page.PhotoContentType ?? "application/octet-stream");
+    }
+
     [HttpGet("officers/{id:guid}")]
     [AllowAnonymous]
     public async Task<IActionResult> Officer(Guid id, CancellationToken cancellationToken)
